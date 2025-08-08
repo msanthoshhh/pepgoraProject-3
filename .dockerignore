@@ -1,0 +1,35 @@
+# Node modules (we install inside the container)
+node_modules
+**/node_modules
+
+# Build output
+dist
+.next
+out
+
+# Logs
+*.log
+logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git files
+.git
+.gitignore
+
+# Cache
+.cache
