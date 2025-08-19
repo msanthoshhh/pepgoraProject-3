@@ -1,8 +1,16 @@
-import { IsString, IsOptional, IsUrl } from 'class-validator';
+import { IsString,IsArray, IsOptional, IsUrl } from 'class-validator';
 
 export class CreateCategoryDto {
   @IsString()
-  name: string;
+  main_cat_name: string;
+
+  @IsOptional()
+  @IsString()
+  uniqueId?: string;
+
+  @IsOptional()
+  @IsString()
+  liveUrl?: string;
 
   @IsOptional()
   @IsString()
@@ -19,4 +27,9 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsUrl({}, { message: 'imageUrl must be a valid URL' })
   imageUrl?: string;  // S3 bucket image URL
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mappedChildren?: string[];
 }

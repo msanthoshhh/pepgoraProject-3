@@ -9,7 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { User } from './user.schema';
-import { SignupDto } from './auth.dto';
+import { SignupDto, UpdateUserDto } from './auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -47,7 +47,7 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload, {
       secret: process.env.JWT_SECRET,
-      expiresIn: '24h',
+      expiresIn: '5h',
     });
 
     const refreshToken = this.jwtService.sign(payload, {
@@ -85,13 +85,20 @@ export class AuthService {
 
       const newAccessToken = this.jwtService.sign(
         { sub: payload.sub, email: payload.email, role: payload.role },
-        { secret: process.env.JWT_SECRET, expiresIn: '1h' },
+        { secret: process.env.JWT_SECRET, expiresIn: '4h' },
       );
 
       return { accessToken: newAccessToken };
     } catch (err) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
+
+  async updateUser(id: string, dto: UpdateUserDto) {
+
+    const user = await this.userModel.findByIdAndUpdate(id, dto, { new: true });
+    if (!user) throw new NotFoundException('User not found');
+    return { message: 'User updated successfully', user };
   }
 
   // ✅ Logout

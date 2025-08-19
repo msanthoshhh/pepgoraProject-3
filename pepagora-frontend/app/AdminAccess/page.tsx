@@ -1,10 +1,11 @@
 'use client';
 
-import { useAuth } from '@/components/hooks/useAuth'; // Or wherever you put it
-import SignupPage from '../signup/page'; // or extract to a `components/UserForm.tsx`
+import { useAuth } from '@/components/hooks/useAuth';
+import SignupPage from '../signup/page';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import UserManagement from '@/components/UserManagement';
 
 export default function AdminAccess() {
   const { userRole, loading } = useAuth();
@@ -12,18 +13,20 @@ export default function AdminAccess() {
 
   useEffect(() => {
     if (!loading && userRole !== 'admin') {
-      router.push('/unauthorized'); // Or login
+      router.push('/unauthorized');
     }
   }, [userRole, loading, router]);
 
   if (loading) return <p className="text-center mt-10">Checking access...</p>;
-  if (userRole !== 'admin') return null; // Prevent flicker
+  if (userRole !== 'admin') return null;
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <Sidebar/>
-      <h1 className="ml-90text-2xl font-bold mb-4">Admin - Create New User</h1>
+      <Sidebar />
+      
       <SignupPage />
+
+      {/* <UserManagement /> View, Update, Delete */}
     </div>
   );
 }

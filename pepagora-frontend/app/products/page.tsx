@@ -3,22 +3,33 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
 import Sidebar from '@/components/Sidebar';
-import { ca } from 'zod/locales';
-import { set } from 'zod';
 import { getPaginationRange } from '@/components/GetPage';
+import axiosInstance from '../../lib/axiosInstance';
+import { jwtDecode } from 'jwt-decode';
+import { toast } from 'react-toastify';
+import { MdImageNotSupported } from "react-icons/md";
+import { TbEdit } from "react-icons/tb";
+import { RiDeleteBin6Line } from "react-icons/ri";
+import { LuSave } from "react-icons/lu";
+import { set } from 'zod';
 
-type Products = {
+
+type Subcategory = {
+  _id: string;
+  sub_cat_name: string;
+  // categoryId: string;
+}
+
+type Category = {
   _id: string;
   name: string;
+  categoryId: string;
   metaTitle?: string;
   metaKeyword?: string;
   metaDescription?: string;
   imageUrl?: string;
-  subcategory?: string;
 };
-
 
 type TokenPayload = {
   sub: string;
@@ -27,475 +38,676 @@ type TokenPayload = {
   exp: number;
 };
 
-export default function productsPage() {
-  const [products, setproducts] = useState<Products[]>([]);
+export default function CategoriesPage() {
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
-  const [editingProduct, setEditingProduct] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+
+  // const router = useRouter();
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const [metaTitle, setMetaTitle] = useState('');
+  const [metaKeyword, setMetaKeyword] = useState('');
+  const [metaDescription, setMetaDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [goToPageInput, setGoToPageInput] = useState('');
+
+
+
+  const [addCategory, setAddCategory] = useState(false);
+  const [viewReadMore, setViewReadMore] = useState(false);
+
+
   const [editForm, setEditForm] = useState({
     name: '',
-    subcategory: '',
     metaTitle: '',
     metaKeyword: '',
     metaDescription: '',
-    imageUrl: '',
   });
+
+  // ✅ Pagination states
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(5); // Fixed limit (you can make this dynamic)
+  const [limit] = useState(10); // Fixed limit (you can make this dynamic)
 
   const router = useRouter();
-  const API_BASE_URL = 'http://localhost:4000';
 
   useEffect(() => {
     const storedToken = localStorage.getItem('accessToken');
-    if (!storedToken) {
-      router.push('/login');
-    } else {
+    if (storedToken) {
       try {
         const decoded: TokenPayload = jwtDecode(storedToken);
         setToken(storedToken);
+        setUserRole(decoded.role);
       } catch (err) {
         console.error('Invalid token:', err);
         router.push('/login');
       }
     }
-  }, [router]);
+  }, []);
 
-  const fetchproducts = async (accessToken: string,currentPage:number) => {
+  // ✅ Get token from localStorage
+  useEffect(() => {
+    fetchCategories(page);
+  }, [page]);
+
+ useEffect(()=>{
+  fetchSubcategories();
+ }, [])  
+
+ const fetchSubcategories = async () => {
+   setLoading(true);
+   try {
+     const res = await axiosInstance.get('/subcategories');
+     const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
+     setSubcategories(data);
+   } catch (err) {
+     console.error('Error fetching subcategories:', err);
+     setSubcategories([]);
+   } finally {
+     setLoading(false);
+   }
+ };
+
+  const fetchCategories = async (currentPage: number) => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/products`, {
-        params: { page: currentPage, limit: limit },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      const res = await axiosInstance.get('/products', {
+        params: { page: currentPage, limit },
+      });  
+
       const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
-      setproducts(data);
-      console.log('Fetched products:', res.data.data.data);
+      setCategories(data); 
       setTotalPages(res.data.data.pagination.totalPages || 1);
-      // console.log('Fetched products:', res.data.data);
     } catch (err) {
-      console.error('Error fetching products:', err);
-      setproducts([]);
+      console.error('Error fetching categories:', err);
+      setCategories([]);
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        router.push('/login');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (token) {
-      fetchproducts(token, page);
-    }
-  }, [token, page]);
 
+
+  // ✅ Delete Category
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+    // if (!confirm('Are you sure you want to delete this category?')) return;
+
     try {
-      await axios.delete(`${API_BASE_URL}/products/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        withCredentials: true, // For cookie (refreshToken)
-      });
-      // fetchproducts(token!);
-       if (products.length === 1 && page > 1) {
+      const res = await axiosInstance.delete(`/products/${id}`);
+
+      if (res.status === 200) {
+        toast.success("Category deleted successfully!");
+      }
+
+      // If last item on page was deleted, move to previous page if possible
+      if (categories.length === 1 && page > 1) {
         setPage(page - 1);
       } else {
-        fetchproducts(token!, page);
+        fetchCategories(page);
       }
     } catch (err) {
+      toast.error(`Failed to delete category ${id}`);
       console.error('Delete failed:', err);
     }
   };
 
-  // console.log('Products:', products?.map(product => product.subcategory?._id || 'No subcategory'));
-
-  const startEdit = (product: Products) => {
-    setEditingProduct(product._id);
+  // ✅ Start Edit Mode
+  const startEdit = (cat: Category) => {
+    setEditingCategory(cat._id);
     setEditForm({
-      name: product.name,
-      subcategory: product.subcategory || '',
-      metaTitle: product.metaTitle || '',
-      metaKeyword: product.metaKeyword || '',
-      metaDescription: product.metaDescription || '',
-      imageUrl: product.imageUrl || '',
+      name: cat.name,
+      metaTitle: cat.metaTitle || '',
+      metaDescription: cat.metaDescription || '',
+      metaKeyword: cat.metaKeyword || '',
     });
   };
 
+  // ✅ Cancel Edit
   const cancelEdit = () => {
-    setEditingProduct(null);
+    setEditingCategory(null);
     setEditForm({
       name: '',
-      subcategory: '',
       metaTitle: '',
-      metaKeyword: '',
       metaDescription: '',
-      imageUrl: '',
+      metaKeyword: '',
     });
   };
 
-  const saveEdit = async (id: string, subcategoryId: string) => {
-    if (!editForm.name.trim()) {
-      alert('Name is required');
-      return;
-    }
+  // ✅ Save Edit
+  const saveEdit = async (id: string) => {
 
     try {
-      const payload = {
-        name: editForm.name,
-        subcategory: subcategoryId,
-        imageUrl: editForm.imageUrl,
-        metaTitle: editForm.metaTitle,
-        metaKeyword: editForm.metaKeyword,
-        metaDescription: editForm.metaDescription,
-      };
 
-      console.log('Saving eddfghjgfdit:', payload);
+      const payload ={name: editForm.name,
+          metaTitle: editForm.metaTitle,
+          metaDescription: editForm.metaDescription,
+          metaKeyword: editForm.metaKeyword,
+        }
+      const res = await axiosInstance.put(
+        `/products/${id}`,payload
+      );
 
-      await axios.put(`${API_BASE_URL}/products/${id}`, payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        withCredentials: true, // For cookie (refreshToken)
-      });
+      if (res.status === 200) {
+        toast.success(`Category ${editForm.name} updated successfully!`);
+        cancelEdit();
+        fetchCategories(page);
+      }
+      else {
+        toast.error(`Failed to update category ${editForm.name}`);
+      }
+    } catch (err) {
+      toast.error(`Failed to update category ${editForm.name}`);
+      console.error('Update failed:', err);
+    }
+  };
 
-      cancelEdit();
-      fetchproducts(token!, page);
-    } catch (err: any) {
-      console.error('Update failed:', err?.response?.data || err.message);
-      alert('Update failed. See console for details.');
+  const stringLength = (str : string) =>{
+    return (100<=str.length);
+  }
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      // const token = localStorage.getItem('accessToken');
+
+      const payload = { name, mappedParent:category, metaTitle, metaKeyword, metaDescription };
+
+
+      const res = await axiosInstance.post(
+        '/products',
+        payload,
+
+      );
+      res.status == 201 ?
+        toast.success("Product created successfully!")
+        : toast.error("Failed to create Product");
+
+      setAddCategory(false);
+      fetchCategories(page);
+    } catch (err) {
+      console.error('Failed to create Product', err);
+      toast.error('Failed to create Product. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    // <div className="p-6 max-w-6xl mx-auto">
-    //   <Sidebar />
-    //   <div className="flex justify-between items-center mb-6">
-    //     <h1 className="ml-80 text-2xl font-bold">products</h1>
-    //     <button
-    //       onClick={() => router.push('/products/add')}
-    //       className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-    //     >
-    //       Add Products
-    //     </button>
-    //   </div>
+    <div className="ml-60 flex min-h-screen bg-gray-50 relative">
+      {/* Sidebar */}
+      <Sidebar />
 
-    //   {loading ? (
-    //     <p>Loading products...</p>
-    //   ) : products.length === 0 ? (
-    //     <p>No products found.</p>
-    //   ) : (
-    //     <div className="ml-80 overflow-x-auto">
-    //       <table className="w-full border border-gray-200">
-    //         <thead>
-    //           <tr className="bg-gray-200 text-left">
-    //             <th className="p-2">Image</th>
-    //             <th className="p-2">Name</th>
-    //             {/* <th className="p-2">Category</th> */}
-    //             <th className="p-2">Meta Title</th>
-    //             <th className="p-2">Meta Keyword</th>
-    //             <th className="p-2">Meta Description</th>
-    //             <th className="p-2">Actions</th>
-    //           </tr>
-    //         </thead>
-    //         <tbody>
-    //           {products.map((product) => (
-    //             <tr key={product._id} className="border-t">
-    //               <td className="p-2">
-    //                 {product.imageUrl ? (
-    //                   <img
-    //                     src={product.imageUrl}
-    //                     alt={product.name}
-    //                     className="w-16 h-16 object-cover rounded"
-    //                   />
-    //                 ) : (
-    //                   <span className="text-gray-400">No image</span>
-    //                 )}
-    //               </td>
-
-    //               {editingProduct === product._id ? (
-    //                 <>
-    //                   <td className="p-2">
-    //                     <input
-    //                       type="text"
-    //                       value={editForm.name}
-    //                       onChange={(e) =>
-    //                         setEditForm({ ...editForm, name: e.target.value })
-    //                       }
-    //                       className="border p-1 w-full"
-    //                     />
-    //                   </td>
-    //                   <td className="p-2">{product.subcategory?._id || '-'}</td>
-    //                   <td className="p-2">
-    //                     <input
-    //                       type="text"
-    //                       value={editForm.metaTitle}
-    //                       onChange={(e) =>
-    //                         setEditForm({ ...editForm, metaTitle: e.target.value })
-    //                       }
-    //                       className="border p-1 w-full"
-    //                     />
-    //                   </td>
-                     
-    //                   <td className="p-2">
-    //                     <input
-    //                       type="text"
-    //                       value={editForm.metaKeyword}
-    //                       onChange={(e) =>
-    //                         setEditForm({ ...editForm, metaKeyword: e.target.value })
-    //                       }
-    //                       className="border p-1 w-full"
-    //                     />
-    //                   </td>
-
-    //                   <td className="p-2">
-    //                     <input
-    //                       type="text"
-    //                       value={editForm.metaDescription}
-    //                       onChange={(e) =>
-    //                         setEditForm({
-    //                           ...editForm,
-    //                           metaDescription: e.target.value,
-    //                         })
-    //                       }
-    //                       className="border p-1 w-full"
-    //                     />
-    //                   </td>
-    //                   <td className="p-2 space-x-2">
-    //                     <button
-    //                       onClick={() => saveEdit(product._id)}
-    //                       className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
-    //                     >
-    //                       Save
-    //                     </button>
-    //                     <button
-    //                       onClick={cancelEdit}
-    //                       className="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600"
-    //                     >
-    //                       Cancel
-    //                     </button>
-    //                   </td>
-    //                 </>
-    //               ) : (
-    //                 <>
-    //                   <td className="p-2">{product.name}</td>
-    //                   {/* <td className="p-2">{product.subcategory?._id || '-'}</td> */}
-    //                   <td className="p-2">{product.metaTitle || '-'}</td>
-    //                   <td className="p-2">{product.metaKeyword || '-'}</td>
-    //                   <td className="p-2">{product.metaDescription || '-'}</td>
-    //                   <td className="p-2 space-x-2">
-    //                     <button
-    //                       onClick={() => startEdit(product)}
-    //                       className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600"
-    //                     >
-    //                       Edit
-    //                     </button>
-    //                     <button
-    //                       onClick={() => handleDelete(product._id)}
-    //                       className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-    //                     >
-    //                       Delete
-    //                     </button>
-    //                   </td>
-    //                 </>
-    //               )}
-    //             </tr>
-    //           ))}
-    //         </tbody>
-    //       </table>
-    //     </div>
-    //   )}
-    // </div>
-    <div className="flex min-h-screen bg-gray-50">
-  {/* Sidebar */}
-  <Sidebar />
-
-  {/* Main Content */}
-  <div className="ml-65 flex-1 p-6 max-w-6xl mx-auto">
-    {/* Header */}
-    <div className="flex justify-between items-center mb-6">
-      <h1 className="text-3xl font-bold text-gray-800">Products</h1>
-      <button
-        onClick={() => router.push('/products/add')}
-        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition"
-      >
-        ➕ Add Product
-      </button>
-    </div>
-
-    {/* Loading / Empty State */}
-    {loading ? (
-      <div className="flex justify-center items-center h-40">
-        <p className="text-gray-500 text-lg">Loading products...</p>
-      </div>
-    ) : products.length === 0 ? (
-      <div className="text-center bg-white rounded-lg shadow p-10">
-        <p className="text-gray-600 text-lg">No products found.</p>
-        <button
-          onClick={() => router.push('/products/add')}
-          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          Add Your First Product
-        </button>
-      </div>
-    ) : (
-      <>
-      <div className="overflow-x-auto bg-white rounded-lg shadow">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-100 text-gray-700 text-sm uppercase">
-              <th className="p-3 text-left">Image</th>
-              <th className="p-3 text-left">Product</th>
-              <th className="p-3 text-left">Meta Title</th>
-              <th className="p-3 text-left">Meta Keyword</th>
-              <th className="p-3 text-left">Meta Description</th>
-              <th className="p-3 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map((product, index) => (
-              <tr
-                key={product._id}
-                className={`border-t hover:bg-gray-50 ${
-                  index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                }`}
+      {/* Main Content */}
+      <div className="flex-1 p-6 max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-center mb-6 w-full relative">
+          <h1 className="text-3xl font-bold text-gray-800">Products</h1>
+          {userRole !== 'pepagora_manager' && (
+            <>
+              <button
+                onClick={() => setAddCategory(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition absolute right-4"
               >
-                {/* Image */}
-                <td className="p-3">
-                  {product.imageUrl ? (
-                     <a
-                      href={product.imageUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        className="w-14 h-14 object-cover rounded-lg shadow-sm hover:opacity-80 transition"
-                      />
-                    </a>
-                  ) : (
-                    <span className="text-gray-400 italic">No image</span>
-                  )}
-                </td>
+                Add Product
+              </button>
+              {addCategory && (
+                <div className='fixed inset-0 z-50 flex items-center justify-center'>
 
-                {/* Editable or Read-only */}
-                {editingProduct === product._id ? (
-                  <>
-                    <td className="p-3">
+
+                  <div className="p-6 max-w-3xl mx-auto bg-amber-50 border-2 relative" >
+                    <h1 className="text-2xl font-bold mb-6 text-center">Add Product</h1>
+                    <button className='absolute top-2 right-4 text-xl hover:cursor-pointer' onClick={() => setAddCategory(false)}>x</button>
+                    <form onSubmit={handleSubmit} className="space-y-4">
                       <input
                         type="text"
-                        value={editForm.name}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, name: e.target.value})
-                        }
-                        className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
+                        placeholder="Product Name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full p-2 border rounded"
+                        required
                       />
-                    </td>
-                    <td className="p-3">
+                       <div>
+                      <label className="block font-medium">Subcategory</label>
+                      <select
+                        value={category || ' '}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="border border-gray-300 rounded px-3 py-2 w-full"
+                        required
+                      >
+                        <option value="">-- Select subcategory --</option>
+                        {subcategories.map((subcat) => (
+                          <option key={subcat._id} value={subcat._id}>
+                            {subcat.sub_cat_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                       <input
                         type="text"
-                        value={editForm.metaTitle}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, metaTitle: e.target.value })
-                        }
-                        className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
+                        placeholder="Meta Title"
+                        value={metaTitle}
+                        onChange={(e) => setMetaTitle(e.target.value)}
+                        className="w-full p-2 border rounded"
                       />
-                    </td>
-                    <td className="p-3">
                       <input
                         type="text"
-                        value={editForm.metaKeyword}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, metaKeyword: e.target.value })
-                        }
-                        className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
+                        placeholder="Meta Keywords"
+                        value={metaKeyword}
+                        onChange={(e) => setMetaKeyword(e.target.value)}
+                        className="w-full p-2 border rounded"
                       />
-                    </td>
-                    <td className="p-3">
-                      <input
+                      <textarea
+                        placeholder="Meta Description"
+                        value={metaDescription}
+                        onChange={(e) => setMetaDescription(e.target.value)}
+                        className="w-full p-2 border rounded"
+                        rows={3}
+                      />
+                      {/* <input
                         type="text"
-                        value={editForm.metaDescription}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            metaDescription: e.target.value,
-                          })
-                        }
-                        className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="p-3 text-center space-x-2">
-                      <button
-                        onClick={() => saveEdit(product._id, product.subcategory || '')}
-                        className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600"
-                      >
-                        💾 Save
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="bg-gray-500 text-white px-3 py-1 rounded-lg hover:bg-gray-600"
-                      >
-                        ✖ Cancel
-                      </button>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="p-3">{product.name}</td>
-                    <td className="p-3">{product.metaTitle || '-'}</td>
-                    <td className="p-3">{product.metaKeyword || '-'}</td>
-                    <td className="p-3">{product.metaDescription || '-'}</td>
-                    <td className="p-3 text-center flex justify-center gap-2">
-                      <button
-                        onClick={() => startEdit(product)}
-                        className="bg-yellow-500 text-white px-3 py-1 rounded-lg hover:bg-yellow-600"
-                      >
-                        ✏ Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product._id)}
-                        className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600"
-                      >
-                        🗑 Delete
-                      </button>
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex justify-center items-center gap-4 mt-6">
+                        placeholder="Image URL (e.g. https://example.com/image.jpg)"
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        className="w-full p-2 border rounded"
+                      /> */}
+                      <div className="flex justify-center">
+                        <button
+                          type="submit"
+                          // disabled={loading}
+                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                        // onClick={() => setAddCategory(false)}
+                        >
+                          Add Product
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+              )}
+            </>
+          )}
+
+        </div>
+
+        {/* Loading / Empty State */}
+        {loading ? (
+          <div className="flex justify-center items-center h-40">
+            <p className="text-gray-500">Loading Products...</p>
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="text-center bg-white rounded-lg shadow p-10">
+            <p className="text-gray-600 text-lg">No products found.</p>
+          </div>
+        ) : (
+          <>
+            {/* Table */}
+            <div className="overflow-x-auto bg-white rounded-lg shadow">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 text-gray-700 text-sm uppercase">
+                    <th className="p-3 text-left">Image</th>
+                    <th className="p-3 text-left">products</th>
+                    <th className="p-3 text-left">Meta Title</th>
+                    <th className="p-3 text-left">Meta Keywords</th>
+                    <th className="p-3 text-left">Meta Description</th>
+                    {userRole !== 'pepagora_manager' && (
+                      <th className="p-3 text-center">Actions</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {categories.map((cat, index) => (
+                    <tr
+                      key={cat._id}
+                      className={`border-t hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                        }`}
+                    >
+                      {/* Image */}
+                      <td className="p-3">
+                        {cat.imageUrl ? (
+                          <a
+                            href={cat.imageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <img
+                              src={cat.imageUrl}
+                              alt={cat.name}
+                              className="w-14 h-14 object-cover rounded-lg shadow-sm hover:opacity-80 transition"
+                            />
+                          </a>
+                        ) : (
+                          <MdImageNotSupported className="text-gray-400 w-14 h-14" />
+                        )}
+                      </td>
+
+                      {editingCategory === cat._id ? (
+                        <>
+                          <>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-justify">{cat.name}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-justify">{cat.metaTitle || '-'}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-justify">{cat.metaKeyword || '-'}</td>
+                            <td className="p-3 max-w-72 text-justify">{cat.metaDescription || '-'}<p className='text-blue-500 cursor-pointer text-xs'>Read more..</p></td>
+                            {userRole !== 'pepagora_manager' && (
+                              <td className="p-3 text-center flex justify-center gap-2">
+                                <div className="flex flex-col gap-2 mt-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditingCategory(cat._id);
+                                      setEditForm({
+                                        name: cat.name,
+                                        metaTitle: cat.metaTitle || '',
+                                        metaKeyword: cat.metaKeyword || '',
+                                        metaDescription: cat.metaDescription || '',
+                                        // imageUrl: cat.imageUrl || '',
+                                      });
+                                      setShowEditModal(true);
+                                    }}
+                                    className="bg-green-500 text-white px-3 py-2 rounded-2xl hover:cursor-pointer"
+                                  >
+                                    <div className='flex'>
+                                      <TbEdit className='mt-1 mx-1' />Edit
+                                    </div>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setCategoryToDelete(cat._id);
+                                      setShowDeleteModal(true);
+                                    }}
+                                    className='bg-red-500 rounded-2xl px-3 py-2 hover:cursor-pointer text-white'
+
+                                  >
+                                   <div className='flex'>
+                                    <RiDeleteBin6Line className='mt-1 mx-1' />Delete
+                                  </div>
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+
+                          </>
+                          {showEditModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center">
+                              <div className="bg-amber-50 rounded-lg shadow-2xl p-6 w-full max-w-lg relative border-2">
+                                <h2 className="text-xl font-bold mb-4">Edit Product</h2>
+
+                                <div className="space-y-3">
+                                  <input
+                                    type="text"
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Product Name"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editForm.metaTitle}
+                                    onChange={(e) => setEditForm({ ...editForm, metaTitle: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Meta Title"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editForm.metaKeyword}
+                                    onChange={(e) => setEditForm({ ...editForm, metaKeyword: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Meta Keyword"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editForm.metaDescription}
+                                    onChange={(e) => setEditForm({ ...editForm, metaDescription: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Meta Description"
+                                  />
+                                  {/* <input
+                                    type="text"
+                                    value={editForm.imageUrl}
+                                    onChange={(e) => setEditForm({ ...editForm, imageUrl: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Image URL"
+                                  /> */}
+                                </div>
+
+                                <div className="flex justify-end gap-2 mt-6">
+                                  <button
+                                    onClick={() => {
+                                      saveEdit(editingCategory);
+                                      setShowEditModal(false);
+                                      setEditingCategory(null);
+                                    }}
+                                    className="bg-green-600 text-white p-2 rounded flex"
+                                  >
+                                    <LuSave className='text-sm mt-1'/> <p className="text-sm px-2">Save</p>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setShowEditModal(false);
+                                      cancelEdit();
+                                    }}
+                                    className="bg-red-500 text-white px-4 pb-2 rounded text-lg"
+                                  >
+                                    x <span className="text-sm">Cancel</span>
+                                  </button>
+                                </div>
+
+                                {/* Close button in corner */}
+                                <button
+                                  className="absolute top-2 right-3 text-gray-400 hover:text-gray-600 text-2xl"
+                                  onClick={() => {
+                                    setShowEditModal(false);
+                                    cancelEdit();
+                                  }}
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+
+
+                        </>
+                      ) : (
+                        <>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-justify">{cat.name}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-justify">{cat.metaTitle || '-'}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-justify">{cat.metaKeyword || '-'}</td>
+                            <td className={`p-3 w-72 text-justify h-20`}>
+                              <div className={`${viewReadMore ? 'max-h-max' : 'overflow-y-hidden max-h-14'}`}>
+                                {cat.metaDescription || '-'}
+                              </div>
+                              {stringLength(cat.metaDescription || '') && (
+                                <p
+                                  className="text-blue-500 cursor-pointer text-xs mt-1"
+                                  onClick={() => setViewReadMore((prev) => !prev)}
+                                >
+                                  Read {viewReadMore ? 'less' : 'more'}...
+                                </p>
+                              )}
+                            </td>
+
+
+                          {userRole !== 'pepagora_manager' && (
+                            <td className="p-3 text-center flex justify-center gap-2 max-w-72">
+                              <div className="flex flex-col gap-2 mt-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingCategory(cat._id);
+                                    setEditForm({
+                                      name: cat.name,
+                                      metaTitle: cat.metaTitle || '',
+                                      metaKeyword: cat.metaKeyword || '',
+                                      metaDescription: cat.metaDescription || '',
+                                      
+                                    });
+                                    setShowEditModal(true);
+                                  }}
+                                  className="bg-green-500 text-white px-3 py-2 rounded-2xl hover:cursor-pointer"
+                                >
+                                  <div className='flex'>
+                                    <TbEdit className='mt-1 mx-1'/>Edit
+                                  </div>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setCategoryToDelete(cat._id);
+                                    setShowDeleteModal(true);
+                                  }}
+                                  className='bg-red-500 rounded-2xl px-3 py-2 hover:cursor-pointer text-white flex'
+
+                                >
+                                  <div className='flex'>
+                                    <RiDeleteBin6Line className='mt-1 mx-1' />Delete
+                                  </div>
+                                </button>
+                              </div>
+                            </td>
+                          )}
+
+                        </>
+                      )}
+                      {showDeleteModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center border-gray-400">
+                          <div className="bg-amber-50 rounded-lg shadow-sm p-6 w-full max-w-md text-center relative border-2">
+                            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                              Confirm Deletion
+                            </h2>
+                            <p className="text-gray-600 mb-6">
+                              Do you want to delete this Product?
+                            </p>
+
+                            <div className="flex justify-center gap-4">
+                              <button
+                                onClick={async () => {
+                                  if (categoryToDelete) {
+                                    await handleDelete(categoryToDelete);
+                                    setShowDeleteModal(false);
+                                    setCategoryToDelete(null);
+                                  }
+                                }}
+                                className="bg-red-600 hover:bg-red-700 animate-pulse text-white px-4 py-2 rounded"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowDeleteModal(false);
+                                  setCategoryToDelete(null);
+                                }}
+                                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+
+                            {/* Close (X) button */}
+                            <button
+                              onClick={() => {
+                                setShowDeleteModal(false);
+                                setCategoryToDelete(null);
+                              }}
+                              className="absolute top-2 right-3 text-gray-400 hover:text-gray-600 text-2xl"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ✅ Pagination Controls
+            <div className="flex justify-center items-center gap-4 mt-6">
+
               {totalPages > 1 && (
-  <div className="flex justify-center items-center gap-2 mt-6 flex-wrap">
-    {/* Prev Button */}
+                <div className="flex justify-center items-center gap-2 mt-6 flex-wrap">
+                  {/* Prev Button */}
+                  {/* <button
+                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                    onClick={() => setPage(page - 1)}
+                    disabled={page === 1}
+                  >
+                    &laquo; Prev
+                  </button> */}
+
+                  {/* Page Numbers */}
+                  {/* {getPaginationRange(page, totalPages).map((p, idx) =>
+                    p === '...' ? (
+                      <span key={idx} className="px-3 py-1 text-gray-500">
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={idx}
+                        onClick={() => setPage(p as number)}
+                        className={`px-3 py-1 rounded ${p === page
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )} */}
+
+                  {/* Next Button */}
+                  {/* <button
+                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                    onClick={() => setPage(page + 1)}
+                    disabled={page === totalPages}
+                  >
+                    Next &raquo;
+                  </button>
+                </div>
+              )} */}
+
+            {/* </div>  */}
+
+                   <div className="flex items-center justify-between flex-wrap mt-6 gap-4">
+  {/* --- Pagination Buttons --- */}
+  <div className="flex gap-2 flex-wrap">
     <button
-      className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-      onClick={() => setPage(page - 1)}
+      onClick={() => {
+        if (page > 1) {
+          setPage(page - 1);
+          fetchCategories(page - 1);
+        }
+      }}
       disabled={page === 1}
+      className="px-3 py-1 rounded border disabled:opacity-50"
     >
-      &laquo; Prev
+      Prev
     </button>
 
-    {/* Page Numbers */}
-    {getPaginationRange(page, totalPages).map((p, idx) =>
+    {getPaginationRange(page, totalPages, 1).map((p, idx) =>
       p === '...' ? (
-        <span key={idx} className="px-3 py-1 text-gray-500">
-          ...
-        </span>
+        <span key={idx} className="px-3 py-1">...</span>
       ) : (
         <button
           key={idx}
-          onClick={() => setPage(p as number)}
-          className={`px-3 py-1 rounded ${
-            p === page
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+          onClick={() => {
+            setPage(Number(p));
+            fetchCategories(Number(p));
+          }}
+          className={`px-3 py-1 rounded border ${
+            p === page ? 'bg-blue-600 text-white' : ''
           }`}
         >
           {p}
@@ -503,23 +715,59 @@ export default function productsPage() {
       )
     )}
 
-    {/* Next Button */}
     <button
-      className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-      onClick={() => setPage(page + 1)}
+      onClick={() => {
+        if (page < totalPages) {
+          setPage(page + 1);
+          fetchCategories(page + 1);
+        }
+      }}
       disabled={page === totalPages}
+      className="px-3 py-1 rounded border disabled:opacity-50"
     >
-      Next &raquo;
+      Next
     </button>
   </div>
-)}
 
-            </div>
-
-      </>
-    )}
+  {/* --- Go To Page Input --- */}
+  <div className="flex items-center gap-2">
+    <input
+      type="number"
+      min={1}
+      max={totalPages}
+      placeholder="Page"
+      className="w-16 px-2 py-1 text-sm border rounded text-center"
+      value={goToPageInput}
+      onChange={(e) => setGoToPageInput(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          const page = Number(goToPageInput);
+          if (page >= 1 && page <= totalPages) {
+            setPage(page);
+            fetchCategories(page);
+            setGoToPageInput('');
+          }
+        }
+      }}
+    />
+    <button
+      className="bg-blue-600 text-white text-sm px-3 py-1 rounded hover:bg-blue-700"
+      onClick={() => {
+        const page = Number(goToPageInput);
+        if (page >= 1 && page <= totalPages) {
+          setPage(page);
+          fetchCategories(page);
+          setGoToPageInput('');
+        }
+      }}
+    >
+      Go
+    </button>
   </div>
 </div>
-
+          </>
+        )}
+      </div>
+    </div>
   );
 }

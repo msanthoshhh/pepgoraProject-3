@@ -1,4 +1,4 @@
-import { IsString, IsEmail, MinLength, IsEnum } from 'class-validator';
+import { IsString, IsEmail, MinLength, IsEnum, IsIn } from 'class-validator';
 
 export class SignupDto {
   @IsEmail()
@@ -22,4 +22,15 @@ export class LoginDto {
   @IsString()
   @MinLength(6)
   password: string;
+} 
+
+export class UpdateUserDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  username: string;
+
+  @IsIn(['admin', 'category_manager', 'pepagora_manager'])
+  role: string;
 }

@@ -40,17 +40,6 @@ export class CategoryController {
     };
   }
 
-  // @Get()
-  // @HttpCode(HttpStatus.OK)
-  // async findAll() {
-  //   const categories = await this.categoryService.findAll();
-  //   return {
-  //     statusCode: HttpStatus.OK,
-  //     message: 'Categories fetched successfully',
-  //     data: categories,
-  //   };
-  // import { Query } from '@nestjs/common';
-  // }
 
 @Get()
 @HttpCode(HttpStatus.OK)

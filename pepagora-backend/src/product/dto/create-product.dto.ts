@@ -4,8 +4,17 @@ export class CreateProductDto {
   @IsString()
   name: string;
 
+  @IsOptional()
   @IsMongoId()
-  subcategory: string;
+  mappedParent?: string;
+
+  @IsOptional()
+  @IsString()
+  uniqueId?:string;
+
+  @IsOptional()
+  @IsString()
+  liveUrl?:string;
 
   
   @IsOptional()

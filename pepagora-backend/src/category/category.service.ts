@@ -15,7 +15,7 @@ export class CategoryService {
 
   async create(dto: CreateCategoryDto) {
     // Check for duplicate category name
-    const existingCategory = await this.categoryModel.findOne({ name: dto.name });
+    const existingCategory = await this.categoryModel.findOne({ name: dto.main_cat_name });
     if (existingCategory) {
       throw new ConflictException('Category with this name already exists');
     }

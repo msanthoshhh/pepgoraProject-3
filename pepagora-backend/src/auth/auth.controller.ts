@@ -8,12 +8,13 @@ import {
   Param,
   Delete,
   Res,
+  Put,
   Req,
-  UnauthorizedException,
+  UnauthorizedException,NotFoundException
 } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
-import { SignupDto, LoginDto } from './auth.dto';
+import { SignupDto, LoginDto, UpdateUserDto } from './auth.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { signupSchema, loginSchema } from './auth.zod';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -68,17 +69,20 @@ export class AuthController {
   // ✅ Logout (Clear Refresh Token Cookie)
   @Post('logout')
   async logout(@Res({ passthrough: true }) res: Response, @Body('userId') userId: string) {
+    
     await this.authService.logout(userId);
-
-    // ✅ Clear cookie
     res.clearCookie('refreshToken', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     });
 
-    return { message: 'Logged outsuccessfully' };
+    return { message: 'Logged out successfully',
+          userId: userId
+     };
   }
+
+
 
   // ✅ Get all users (Admin only)
   @Get('users')
@@ -94,6 +98,19 @@ async emailExists(@Query('email') email: string) {
   return { exists: !!user };
 }
 
+@Get('users/:id')
+async getUser(@Param('id') id: string) {
+  const user = await this.authService.findUser({ _id: id });
+  if (!user) throw new NotFoundException('User not found');
+  return user;
+}
+
+@Put('users/:id')
+// @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('admin')
+async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+  return this.authService.updateUser(id, dto);
+}
 
   // ✅ Delete a user (Admin only)
   @Delete('users/:id')

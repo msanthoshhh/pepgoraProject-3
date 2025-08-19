@@ -5,12 +5,22 @@ import { Category } from '../category/category.schema';
 @Schema({ timestamps: true })
 export class Subcategory extends Document {
   @Prop({ required: true })
-  name: string;
+  sub_cat_name: string;
 
   @Prop({ type: Types.ObjectId, ref: 'Category', required: true })
-  category: Category;
+  mappedParent: Category;
 
-  
+    @Prop({ type: [Types.ObjectId], ref: 'Product', default: [] })
+  mappedChildren: Types.ObjectId[];
+   
+  // @Prop({ type: Types.ObjectId, ref: 'Product' })
+  // mappedChildren: Types.ObjectId[];
+
+  @Prop()
+  uniqueId?:string;
+  @Prop()
+  liveUrl?:string;  
+
   @Prop()
   metaTitle: string;
 

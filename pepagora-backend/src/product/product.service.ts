@@ -9,7 +9,7 @@ export class ProductService {
   constructor(@InjectModel(Product.name) private productModel: Model<Product>) {}
 
   async create(dto: CreateProductDto) {
-    const existingProduct = await this.productModel.findOne({ name: dto.name, subcategory: dto.subcategory });
+    const existingProduct = await this.productModel.findOne({ name: dto.name, subcategory: dto.mappedParent });
     if (existingProduct) throw new ConflictException('Product with this name already exists in the subcategory');
 
     try {
@@ -61,7 +61,7 @@ export class ProductService {
 
 
   async findOne(id: string) {
-    const product = await this.productModel.findById(id).populate('subcategory');
+    const product = await this.productModel.findById(id).populate('mappedParent');
     if (!product) throw new NotFoundException('Product not found');
     return product;
   }

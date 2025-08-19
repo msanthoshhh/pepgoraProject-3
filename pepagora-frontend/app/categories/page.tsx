@@ -3,18 +3,24 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
 import Sidebar from '@/components/Sidebar';
 import { getPaginationRange } from '@/components/GetPage';
-
-
+import axiosInstance from '../../lib/axiosInstance';
+import { jwtDecode } from 'jwt-decode';
+import { toast } from 'react-toastify';
+import { MdImageNotSupported } from "react-icons/md";
+import { TbEdit } from "react-icons/tb";
+import { RiDeleteBin6Line } from "react-icons/ri";
+import { LuSave } from "react-icons/lu";
+import { set } from 'zod';
 type Category = {
   _id: string;
-  name: string;
+  main_cat_name: string;
   metaTitle?: string;
   metaKeyword?: string;
   metaDescription?: string;
   imageUrl?: string;
+  metaChildren?:string[];
 };
 
 type TokenPayload = {
@@ -30,90 +36,107 @@ export default function CategoriesPage() {
   const [token, setToken] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+
+  // const router = useRouter();
+  const [name, setName] = useState('');
+  const [metaTitle, setMetaTitle] = useState('');
+  const [metaKeyword, setMetaKeyword] = useState('');
+  const [metaDescription, setMetaDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [addCategory, setAddCategory] = useState(false);
+  const [viewReadMore, setViewReadMore] = useState(false);
+  const [goToPage, setGoToPage] = useState('');
+  const [goToPageInput, setGoToPageInput] = useState('');
+
+
+  const [mappedChildren, setMappedchildren] = useState<string[]>([])
+  // const [liveUrl,setLiveUrl]=useState('')
+  // const [uniqueId,setUniqueId]=useState('') 
+  // setLiveUrl('');
+  // setMappedchildren([]);
+  // setUniqueId('')
+  // const liveUrl='';
+  // const uniqueId='';
+  // const mappedChildren:string[] =[];
+
 
   const [editForm, setEditForm] = useState({
     name: '',
     metaTitle: '',
     metaKeyword: '',
     metaDescription: '',
-    imageUrl: '',
   });
 
   // ✅ Pagination states
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(5); // Fixed limit (you can make this dynamic)
+  const [limit] = useState(10); // Fixed limit (you can make this dynamic)
 
   const router = useRouter();
-  const API_BASE_URL = 'http://localhost:4000';
 
-  // ✅ Get token from localStorage
   useEffect(() => {
     const storedToken = localStorage.getItem('accessToken');
-    if (!storedToken) {
-      router.push('/login');
-    } else {
+    if (storedToken) {
       try {
         const decoded: TokenPayload = jwtDecode(storedToken);
-        console.log('Decoded Role:', decoded.role);
         setToken(storedToken);
         setUserRole(decoded.role);
-
       } catch (err) {
         console.error('Invalid token:', err);
         router.push('/login');
       }
     }
-  }, [router]);
+  }, []);
 
-  // ✅ Fetch categories with pagination
-  const fetchCategories = async (accessToken: string, currentPage: number) => {
+  // ✅ Get token from localStorage
+  useEffect(() => {
+    fetchCategories(page);
+  }, [page]);
+
+  const fetchCategories = async (currentPage: number) => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/categories`, {
+      const res = await axiosInstance.get('/categories', {
         params: { page: currentPage, limit },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
+      });  
       const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
       setCategories(data);
-      console.log('Fetched categories:', res.data.data.pagination.totalPages);
       setTotalPages(res.data.data.pagination.totalPages || 1);
-      // console.log('Fetched categories:', data);
     } catch (err) {
       console.error('Error fetching categories:', err);
       setCategories([]);
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        router.push('/login');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (token) {
-      fetchCategories(token, page);
-    }
-  }, [token, page]);
+
 
   // ✅ Delete Category
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this category?')) return;
+    // if (!confirm('Are you sure you want to delete this category?')) return;
 
     try {
-      await axios.delete(`${API_BASE_URL}/categories/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const res = await axiosInstance.delete(`/categories/${id}`);
+
+      if (res.status === 200) {
+        toast.success("Category deleted successfully!");
+      }
 
       // If last item on page was deleted, move to previous page if possible
       if (categories.length === 1 && page > 1) {
         setPage(page - 1);
       } else {
-        fetchCategories(token!, page);
+        fetchCategories(page);
       }
     } catch (err) {
+      toast.error(`Failed to delete category ${id}`);
       console.error('Delete failed:', err);
     }
   };
@@ -122,11 +145,10 @@ export default function CategoriesPage() {
   const startEdit = (cat: Category) => {
     setEditingCategory(cat._id);
     setEditForm({
-      name: cat.name,
+      name: cat.main_cat_name,
       metaTitle: cat.metaTitle || '',
       metaDescription: cat.metaDescription || '',
       metaKeyword: cat.metaKeyword || '',
-      imageUrl: cat.imageUrl || '',
     });
   };
 
@@ -138,59 +160,148 @@ export default function CategoriesPage() {
       metaTitle: '',
       metaDescription: '',
       metaKeyword: '',
-      imageUrl: '',
     });
   };
 
   // ✅ Save Edit
   const saveEdit = async (id: string) => {
-    try {
-      await axios.put(
-        `${API_BASE_URL}/categories/${id}`,
-        {
-          name: editForm.name,
+    try { 
+
+      const payload={
+          main_cat_name: editForm.name,
           metaTitle: editForm.metaTitle,
           metaDescription: editForm.metaDescription,
           metaKeyword: editForm.metaKeyword,
-          imageUrl: editForm.imageUrl,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         }
+
+
+
+
+      const res = await axiosInstance.put(
+        `/categories/${id}`,payload
+        
       );
-      cancelEdit();
-      fetchCategories(token!, page);
+
+      if (res.status === 200) {
+        toast.success(`Category ${editForm.name} updated successfully!`);
+        cancelEdit();
+        fetchCategories(page);
+      }
+      else {
+        toast.error(`Failed to update category ${editForm.name}`);
+      }
     } catch (err) {
+      toast.error(`Failed to update category ${editForm.name}`);
       console.error('Update failed:', err);
     }
   };
 
+   const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+
+  try {
+
+    const payload= {
+      main_cat_name: name,
+      metaTitle,
+      metaDescription,
+      metaKeyword,
+      imageUrl
+    } 
+    console.log("bhjknjfret",payload);
+    const res = await axiosInstance.post('/categories',payload );  
+    console.log(res)
+
+    if (res.status === 201) {
+      toast.success("Category created successfully!");
+      setAddCategory(false);
+      fetchCategories(page);
+    } else {
+      toast.error("Failed to create category");
+    }
+  } catch (err) {
+    console.error('Failed to create category', err);
+    toast.error('Failed to create category. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
   return (
-    <div className="ml-60 flex min-h-screen bg-gray-50">
+    <div className="ml-60 flex min-h-screen bg-gray-50 relative">
       {/* Sidebar */}
       <Sidebar />
 
       {/* Main Content */}
       <div className="flex-1 p-6 max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-center mb-6 w-full relative">
           <h1 className="text-3xl font-bold text-gray-800">Categories</h1>
-          {/* <button
-            onClick={() => router.push('/categories/add')}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition"
-          >
-            ➕ Add Category
-          </button> */}
           {userRole !== 'pepagora_manager' && (
-  <button
-    onClick={() => router.push('/categories/add')}
-    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition"
-  >
-     Add Category
-  </button>
-)}
+            <>
+              <button
+                onClick={() => setAddCategory(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition absolute right-4"
+              >
+                Add Category
+              </button>
+              {addCategory && (
+                <div className='fixed inset-0 z-50 flex items-center justify-center'>
+
+
+                  <div className="p-6 max-w-3xl mx-auto bg-amber-50 border-2 relative" >
+                    <h1 className="text-2xl font-bold mb-6 text-center">Add Category</h1>
+                    <button className='absolute top-2 right-4 text-xl hover:cursor-pointer' onClick={() => setAddCategory(false)}>x</button>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      <input
+                        type="text"
+                        placeholder="Category Name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full p-2 border rounded"
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="Meta Title"
+                        value={metaTitle}
+                        onChange={(e) => setMetaTitle(e.target.value)}
+                        className="w-full p-2 border rounded"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Meta Keywords"
+                        value={metaKeyword}
+                        onChange={(e) => setMetaKeyword(e.target.value)}
+                        className="w-full p-2 border rounded"
+                      />
+                      <textarea                      
+                        placeholder="Meta Description"
+                        value={metaDescription}
+                        onChange={(e) => setMetaDescription(e.target.value)}
+                        className="w-full p-2 border rounded"
+                        rows={3}
+                      />
+                      <input type='text' placeholder='Enter your Image Url' value={imageUrl} onChange={(e)=>setImageUrl(e.target.value)}   className="w-full p-2 border rounded"/>
+                      <div className="flex justify-center">
+                        <button
+                          type="submit"
+                          // disabled={loading}
+                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                        // onClick={() => setAddCategory(false)}
+                        >
+                          Add Category
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+              )}
+            </>
+          )}
 
         </div>
 
@@ -215,17 +326,16 @@ export default function CategoriesPage() {
                     <th className="p-3 text-left">Meta Title</th>
                     <th className="p-3 text-left">Meta Keywords</th>
                     <th className="p-3 text-left">Meta Description</th>
-                     {userRole !== 'pepagora_manager' && (
-                    <th className="p-3 text-center">Actions</th> )}
+                    {userRole !== 'pepagora_manager' && (
+                      <th className="p-3 text-center">Actions</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {categories.map((cat, index) => (
                     <tr
                       key={cat._id}
-                      className={`border-t hover:bg-gray-50 ${
-                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                      }`}
+                      className={`border-t hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                        }`}
                     >
                       {/* Image */}
                       <td className="p-3">
@@ -237,121 +347,239 @@ export default function CategoriesPage() {
                           >
                             <img
                               src={cat.imageUrl}
-                              alt={cat.name}
+                              alt={cat.main_cat_name}
                               className="w-14 h-14 object-cover rounded-lg shadow-sm hover:opacity-80 transition"
                             />
                           </a>
                         ) : (
-                          <span className="text-gray-400 italic">No image</span>
+                          <MdImageNotSupported className="text-gray-400 w-14 h-14" />
                         )}
                       </td>
 
                       {editingCategory === cat._id ? (
                         <>
-                          <td className="p-3">
-                            <input
-                              type="text"
-                              value={editForm.name}
-                              onChange={(e) =>
-                                setEditForm({ ...editForm, name: e.target.value })
-                              }
-                              className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <input
-                              type="text"
-                              value={editForm.metaTitle}
-                              onChange={(e) =>
-                                setEditForm({
-                                  ...editForm,
-                                  metaTitle: e.target.value,
-                                })
-                              }
-                              className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <input
-                              type="text"
-                              value={editForm.metaKeyword}
-                              onChange={(e) =>
-                                setEditForm({
-                                  ...editForm,
-                                  metaKeyword: e.target.value,
-                                })
-                              }
-                              className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <input
-                              type="text"
-                              value={editForm.metaDescription}
-                              onChange={(e) =>
-                                setEditForm({
-                                  ...editForm,
-                                  metaDescription: e.target.value,
-                                })
-                              }
-                              className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
-                            />
-                          </td>
-                          <td className="p-3 text-center space-x-2">
-                            <button
-                              onClick={() => saveEdit(cat._id)}
-                              className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="bg-gray-500 text-white px-3 py-1 rounded-lg hover:bg-gray-600"
-                            >
-                              Cancel
-                            </button>
-                          </td>
+                          <>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.main_cat_name}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.metaTitle || '-'}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.metaKeyword || '-'}</td>
+                            <td className="p-3 max-w-72 text-left">{cat.metaDescription || '-'}</td>
+                            {userRole !== 'pepagora_manager' && (
+                              <td className="p-3 text-center flex justify-center gap-2">
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditingCategory(cat._id);
+                                      setEditForm({
+                                        name: cat.main_cat_name,
+                                        metaTitle: cat.metaTitle || '',
+                                        metaKeyword: cat.metaKeyword || '',
+                                        metaDescription: cat.metaDescription || '',
+                                      });
+                                      setShowEditModal(true);
+                                    }}
+                                    className="bg-green-500 text-white px-3 py-2 rounded-2xl hover:cursor-pointer"
+                                  >
+                                    <div className='flex'>
+                                      <TbEdit className='mt-1 mx-1' />Edit
+                                    </div>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setCategoryToDelete(cat._id);
+                                      setShowDeleteModal(true);
+                                    }}
+                                    className='bg-red-500 rounded-2xl px-3 py-2 hover:cursor-pointer text-white'
+
+                                  >
+                                   <div className='flex'>
+                                    <RiDeleteBin6Line className='mt-1 mx-1' />Delete
+                                  </div>
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+
+                          </>
+                          {showEditModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center">
+                              <div className="bg-amber-50 rounded-lg shadow-2xl p-6 w-full max-w-lg relative border-2">
+                                <h2 className="text-xl font-bold mb-4">Edit Category</h2>
+
+                                <div className="space-y-3">
+                                  <input
+                                    type="text"
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Category Name"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editForm.metaTitle}
+                                    onChange={(e) => setEditForm({ ...editForm, metaTitle: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Meta Title"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editForm.metaKeyword}
+                                    onChange={(e) => setEditForm({ ...editForm, metaKeyword: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Meta Keyword"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editForm.metaDescription}
+                                    onChange={(e) => setEditForm({ ...editForm, metaDescription: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Meta Description"
+                                  />
+                                 
+                                </div>
+
+                                <div className="flex justify-end gap-2 mt-6">
+                                  <button
+                                    onClick={() => {
+                                      saveEdit(editingCategory!);
+                                      setShowEditModal(false);
+                                      setEditingCategory(null);
+                                    }}
+                                    className="bg-green-600 text-white p-2 rounded flex"
+                                  >
+                                    <LuSave className='text-sm mt-1'/> <p className="text-sm px-2">Save</p>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setShowEditModal(false);
+                                      cancelEdit();
+                                    }}
+                                    className="bg-red-500 text-white px-4 pb-2 rounded text-lg"
+                                  >
+                                    x <span className="text-sm">Cancel</span>
+                                  </button>
+                                </div>
+
+                                {/* Close button in corner */}
+                                <button
+                                  className="absolute top-2 right-3 text-gray-400 hover:text-gray-600 text-2xl"
+                                  onClick={() => {
+                                    setShowEditModal(false);
+                                    cancelEdit();
+                                  }}
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+
+
                         </>
                       ) : (
                         <>
-                          <td className="p-3">{cat.name}</td>
-                          <td className="p-3">{cat.metaTitle || '-'}</td>
-                          <td className="p-3">{cat.metaKeyword || '-'}</td>
-                          <td className="p-3">{cat.metaDescription || '-'}</td>
-                          {/* <td className="p-3 text-center flex justify-center gap-2"> */}
-                            {/* <button
-                              onClick={() => startEdit(cat)}
-                              className="bg-yellow-500 text-white px-3 py-1 rounded-lg hover:bg-yellow-600"
-                            >
-                              ✏ Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(cat._id)}
-                              className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600"
-                            >
-                              🗑 Delete
-                            </button> */}
-                          {/* </td> */}
-                          <td className="p-3 text-center flex justify-center gap-2">
-  {userRole !== 'pepagora_manager' && (
-    <>
-      <button
-        onClick={() => startEdit(cat)}
-        className="bg-yellow-500 text-white px-3 py-1 rounded-lg hover:bg-yellow-600"
-      >
-         Edit
-      </button>
-      <button
-        onClick={() => handleDelete(cat._id)}
-        className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600"
-      >
-        Delete
-      </button>
-    </>
-  )}
-</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-justify">{cat.main_cat_name}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-justify">{cat.metaTitle || '-'}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-justify">{cat.metaKeyword || '-'}</td>
+                            <td className={"p-3 w-72 text-justify h-20 select-none"}>
+                              <div className={`${viewReadMore ? 'max-h-max' : 'overflow-y-hidden max-h-14'}`}>
+                                {cat.metaDescription || '-'}
+                              </div>
+                              {(80<=(cat.metaDescription || '').length) && (
+                                <p
+                                  className="text-blue-500 cursor-pointer text-xs mt-1"
+                                  onClick={() => setViewReadMore((prev) => !prev)}
+                                >
+                                  View {viewReadMore ? 'less' : 'more'}...
+                                </p>
+                              )}
+                            </td>
+
+
+                          {userRole !== 'pepagora_manager' && (
+                            <td className="p-3 text-center flex justify-center gap-2 max-w-72">
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingCategory(cat._id);
+                                    setEditForm({
+                                      name: cat.main_cat_name,
+                                      metaTitle: cat.metaTitle || '',
+                                      metaKeyword: cat.metaKeyword || '',
+                                      metaDescription: cat.metaDescription || '',
+                                    });
+                                    setShowEditModal(true);
+                                  }}
+                                  className="bg-green-500 text-white px-3 py-2 rounded-2xl hover:cursor-pointer"
+                                >
+                                  <div className='flex'>
+                                    <TbEdit className='mt-1 mx-1'/>Edit
+                                  </div>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setCategoryToDelete(cat._id);
+                                    setShowDeleteModal(true);
+                                  }}
+                                  className='bg-red-500 rounded-2xl px-3 py-2 hover:cursor-pointer text-white flex'
+
+                                >
+                                  <div className='flex'>
+                                    <RiDeleteBin6Line className='mt-1 mx-1' />Delete
+                                  </div>
+                                </button>
+                              </div>
+                            </td>
+                          )}
 
                         </>
+                      )}
+                      {showDeleteModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center border-gray-400">
+                          <div className="bg-amber-50 rounded-lg shadow-sm p-6 w-full max-w-md text-center relative border-2">
+                            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                              Confirm Deletion
+                            </h2>
+                            <p className="text-gray-600 mb-6">
+                              Do you want to delete this category?
+                            </p>
+
+                            <div className="flex justify-center gap-4">
+                              <button
+                                onClick={async () => {
+                                  if (categoryToDelete) {
+                                    await handleDelete(categoryToDelete);
+                                    setShowDeleteModal(false);
+                                    setCategoryToDelete(null);
+                                  }
+                                }}
+                                className="bg-red-600 hover:bg-red-700 animate-pulse text-white px-4 py-2 rounded"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowDeleteModal(false);
+                                  setCategoryToDelete(null);
+                                }}
+                                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+
+                            {/* Close (X) button */}
+                            <button
+                              onClick={() => {
+                                setShowDeleteModal(false);
+                                setCategoryToDelete(null);
+                              }}
+                              className="absolute top-2 right-3 text-gray-400 hover:text-gray-600 text-2xl"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </tr>
                   ))}
@@ -360,49 +588,80 @@ export default function CategoriesPage() {
             </div>
 
             {/* ✅ Pagination Controls */}
-            <div className="flex justify-center items-center gap-4 mt-6">
-              {/* <button
-                className="px-4 py-2 bg-gray-300 rounded disabled:opacity-50"
-                onClick={() => setPage(page - 1)}
-                disabled={page === 1}
-              >
-                Previous
-              </button>
-              <span className="text-gray-700">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                className="px-4 py-2 bg-gray-300 rounded disabled:opacity-50"
-                onClick={() => setPage(page + 1)}
-                disabled={page === totalPages}
-              >
-                Next
-              </button> */}
-              {totalPages > 1 && (
-  <div className="flex justify-center items-center gap-2 mt-6 flex-wrap">
-    {/* Prev Button */}
+            {/* <div className="flex justify-center items-center gap-4 mt-6"> */}
+
+              {/* {totalPages > 1 && (
+                <div className="flex justify-center items-center gap-2 mt-6 flex-wrap">
+                  {/* Prev Button */}
+                  {/* <button
+                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                    onClick={() => setPage(page - 1)}
+                    disabled={page === 1}
+                  >
+                    &laquo; Prev
+                  </button>
+
+                  {/* Page Numbers */}
+                  {/* {getPaginationRange(page, totalPages).map((p, idx) =>
+                    p === '...' ? (
+                      <span key={idx} className="px-3 py-1 text-gray-500">
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={idx}
+                        onClick={() => setPage(p as number)}
+                        className={`px-3 py-1 rounded ${p === page
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+
+                  {/* Next Button */}
+                  {/* <button
+                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                    onClick={() => setPage(page + 1)}
+                    disabled={page === totalPages}
+                  >
+                    Next &raquo;
+                  </button>
+                </div> */} 
+              {/* )}   */}
+
+            {/* </div> */}
+
+            <div className="flex items-center justify-between flex-wrap mt-6 gap-4">
+  {/* --- Pagination Buttons --- */}
+  <div className="flex gap-2 flex-wrap">
     <button
-      className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-      onClick={() => setPage(page - 1)}
+      onClick={() => {
+        if (page > 1) {
+          setPage(page - 1);
+          fetchCategories(page - 1);
+        }
+      }}
       disabled={page === 1}
+      className="px-3 py-1 rounded border disabled:opacity-50"
     >
-      &laquo; Prev
+      Prev
     </button>
 
-    {/* Page Numbers */}
-    {getPaginationRange(page, totalPages).map((p, idx) =>
+    {getPaginationRange(page, totalPages, 1).map((p, idx) =>
       p === '...' ? (
-        <span key={idx} className="px-3 py-1 text-gray-500">
-          ...
-        </span>
+        <span key={idx} className="px-3 py-1">...</span>
       ) : (
         <button
           key={idx}
-          onClick={() => setPage(p as number)}
-          className={`px-3 py-1 rounded ${
-            p === page
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+          onClick={() => {
+            setPage(Number(p));
+            fetchCategories(Number(p));
+          }}
+          className={`px-3 py-1 rounded border ${
+            p === page ? 'bg-blue-600 text-white' : ''
           }`}
         >
           {p}
@@ -410,18 +669,57 @@ export default function CategoriesPage() {
       )
     )}
 
-    {/* Next Button */}
     <button
-      className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-      onClick={() => setPage(page + 1)}
+      onClick={() => {
+        if (page < totalPages) {
+          setPage(page + 1);
+          fetchCategories(page + 1);
+        }
+      }}
       disabled={page === totalPages}
+      className="px-3 py-1 rounded border disabled:opacity-50"
     >
-      Next &raquo;
+      Next
     </button>
   </div>
-)}
 
-            </div>
+  {/* --- Go To Page Input --- */}
+  <div className="flex items-center gap-2">
+    <input
+      type="number"
+      min={1}
+      max={totalPages}
+      placeholder="Page"
+      className="w-16 px-2 py-1 text-sm border rounded text-center"
+      value={goToPageInput}
+      onChange={(e) => setGoToPageInput(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          const page = Number(goToPageInput);
+          if (page >= 1 && page <= totalPages) {
+            setPage(page);
+            fetchCategories(page);
+            setGoToPageInput('');
+          }
+        }
+      }}
+    />
+    <button
+      className="bg-blue-600 text-white text-sm px-3 py-1 rounded hover:bg-blue-700"
+      onClick={() => {
+        const page = Number(goToPageInput);
+        if (page >= 1 && page <= totalPages) {
+          setPage(page);
+          fetchCategories(page);
+          setGoToPageInput('');
+        }
+      }}
+    >
+      Go
+    </button>
+  </div>
+</div>
+
           </>
         )}
       </div>

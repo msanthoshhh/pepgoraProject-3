@@ -1,22 +1,29 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 @Schema({ timestamps: true })
 export class Category extends Document {
   @Prop({ required: true, unique: true })
-  name: string;
+  main_cat_name: string;
 
   @Prop()
-  metaTitle: string;
+  uniqueId?:string;
+  @Prop()
+  liveUrl?:string;
 
   @Prop()
-  metaKeyword: string;
+  metaTitle?: string;
 
   @Prop()
-  metaDescription: string;
+  metaKeyword?: string;
+
+  @Prop()
+  metaDescription?: string;
 
  @Prop()
   imageUrl?: string;
+  @Prop({ type: [Types.ObjectId], ref: 'SubCategory', default: [] })
+  mappedChildren?: Types.ObjectId[];
 }
 
 export const CategorySchema = SchemaFactory.createForClass(Category);

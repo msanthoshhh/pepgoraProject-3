@@ -9,10 +9,12 @@ export class Product extends Document {
 
 
   @Prop({ type: Types.ObjectId, ref: 'Subcategory', required: true })
-  subcategory: Subcategory;
-
-
-  
+  mappedParent?: Subcategory;
+   
+ @Prop()
+ uniqueId?:string;
+ @Prop()
+ liveUrl?:string;  
   @Prop()
   metaTitle: string;
 

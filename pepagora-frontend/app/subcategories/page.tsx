@@ -3,28 +3,33 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
 import Sidebar from '@/components/Sidebar';
-import { ca } from 'zod/locales';
 import { getPaginationRange } from '@/components/GetPage';
-
+import axiosInstance from '../../lib/axiosInstance';
+import { jwtDecode } from 'jwt-decode';
+import { toast } from 'react-toastify';
+import { MdImageNotSupported } from "react-icons/md";
+import { TbEdit } from "react-icons/tb";
+import { RiDeleteBin6Line } from "react-icons/ri";
+import { LuSave } from "react-icons/lu";
+import { FaRegEye } from "react-icons/fa";
+import { set } from 'zod';
 
 type Subcategory = {
   _id: string;
-  name: string;
+  main_cat_name: string;
+  // categoryId: string;
+}
+
+type Category = {
+  _id: string;
+  sub_cat_name: string;
+  mappedParent: string;
   metaTitle?: string;
   metaKeyword?: string;
   metaDescription?: string;
-  imageUrl?: string;
-  category?: {
-    _id: string;
-    name: string;
-    metaTitle?: string;
-    metaDescription?: string;
-    imageUrl?: string;
-  };
+  sub_cat_img_url?: string;
 };
-
 
 type TokenPayload = {
   sub: string;
@@ -33,33 +38,61 @@ type TokenPayload = {
   exp: number;
 };
 
-export default function SubcategoriesPage() {
-  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+// const products = ["abc","def","hij","klm","nop","qrs","tuv","wxyz"]
+type Product = {
+  _id: string;
+  name: string;
+}
+
+export default function CategoriesPage() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products,setProducts]=useState<Product[]>([])
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
-  const [editingSubcategory, setEditingSubcategory] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [productView, setProductView] = useState<boolean>();
+  const [subCategoryId, setSubcategoryId] = useState<string | null>('');
+
+  // const router = useRouter();
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const [metaTitle, setMetaTitle] = useState('');
+  const [metaKeyword, setMetaKeyword] = useState('');
+  const [metaDescription, setMetaDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+
+  const [addCategory, setAddCategory] = useState(false);
+  const [viewReadMore, setViewReadMore] = useState(false);
+  const [goToPage, setGoToPage] = useState('');
+  const [goToPageInput, setGoToPageInput] = useState('');
+
+
+
+
   const [editForm, setEditForm] = useState({
     name: '',
-    category: '',
     metaTitle: '',
     metaKeyword: '',
     metaDescription: '',
-    imageUrl: '',
-  });  
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-    const [limit] = useState(5); // Fixed limit (you can make this dynamic)
+    category: ''
 
+  });
+
+  // ✅ Pagination states
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [limit] = useState(10); // Fixed limit (you can make this dynamic)
 
   const router = useRouter();
-  const API_BASE_URL = 'http://localhost:4000';
 
   useEffect(() => {
     const storedToken = localStorage.getItem('accessToken');
-    if (!storedToken) {
-      router.push('/login');
-    } else {
+    if (storedToken) {
       try {
         const decoded: TokenPayload = jwtDecode(storedToken);
         setToken(storedToken);
@@ -69,24 +102,38 @@ export default function SubcategoriesPage() {
         router.push('/login');
       }
     }
-  }, [router]);
+  }, []);
 
-  const fetchSubcategories = async (accessToken: string, currentPage: number) => {
+  // const fetchProducts =async (id:string)=>{
+  //   setLoading(true); 
+  //   try{
+  //     const res=axiosInstance.get(`/products/${id}`)
+  //     const data=res; 
+  //     cons
+  //   }
+  // }
+
+  // useEffect(()=>{
+  //   fetchProducts
+
+  // },[])
+
+  // ✅ Get token from localStorage
+  useEffect(() => {
+    fetchCategories(page);
+  }, [page]);
+
+  useEffect(() => {
+    fetchSubcategories();
+  }, [])
+
+  const fetchSubcategories = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/subcategories`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        params: {
-          page: currentPage,
-          limit: 1,
-        },
-      });
+      const res = await axiosInstance.get('/categories');
+      console.log('Fetched subcatefghgfgories:', res.data.data.data);
       const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
       setSubcategories(data);
-      console.log('Fetched subcategories:', res.data.data);
-      setTotalPages(res.data.data.pagination.totalPages || 1);
     } catch (err) {
       console.error('Error fetching subcategories:', err);
       setSubcategories([]);
@@ -95,467 +142,708 @@ export default function SubcategoriesPage() {
     }
   };
 
-  useEffect(() => {
-    if (token) {
-      fetchSubcategories(token,currentPage);
-    }
-  }, [token,currentPage]);
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this subcategory?')) return;
+  const fetchCategories = async (currentPage: number) => {
+    setLoading(true);
     try {
-      await axios.delete(`${API_BASE_URL}/subcategories/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const res = await axiosInstance.get('/subcategories', {
+        params: { page: currentPage, limit },
       });
-      // fetchSubcategories(token!);
-      if (subcategories.length === 1 && currentPage > 1) {
-        setCurrentPage(currentPage - 1);
+
+      console.log('Fetched categories:', res.data.data.data);
+      const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
+      setCategories(data);
+      setTotalPages(res.data.data.pagination.totalPages || 1);
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+      setCategories([]);
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        router.push('/login');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+
+  // ✅ Delete Category
+  const handleDelete = async (id: string) => {
+    // if (!confirm('Are you sure you want to delete this category?')) return;
+
+    try {
+      const res = await axiosInstance.delete(`/subcategories/${id}`);
+
+      if (res.status === 200) {
+        toast.success("Subcategory deleted successfully!");
+      }
+
+      // If last item on page was deleted, move to previous page if possible
+      if (categories.length === 1 && page > 1) {
+        setPage(page - 1);
       } else {
-        fetchSubcategories(token!, currentPage);
+        fetchCategories(page);
       }
     } catch (err) {
+      toast.error(`Failed to delete subcategory ${id}`);
       console.error('Delete failed:', err);
     }
   };
-  console.log('Subcatedgbgrgories:', subcategories?.map(subcat => subcat.category?._id || 'No category'));
-  
 
-  const startEdit = (subcat: Subcategory) => {
-    setEditingSubcategory(subcat._id);
-    setEditForm({
-      name: subcat.name,
-      category: subcat.category?._id || '',
-      metaTitle: subcat.metaTitle || '',
-      metaKeyword: subcat.metaKeyword || '',
-      metaDescription: subcat.metaDescription || '',
-      imageUrl: subcat.imageUrl || '',
-    });
-  };
+  // // ✅ Start Edit Mode
+  // const startEdit = (cat: Category) => {
+  //   setEditingCategory(cat._id);
+  //   setEditForm({
+  //     name: cat.sub_cat_name,
+  //     metaTitle: cat.metaTitle || '',
+  //     metaDescription: cat.metaDescription || '',
+  //     metaKeyword: cat.metaKeyword || '',
+  //   });
+  // };
 
+  // ✅ Cancel Edit
   const cancelEdit = () => {
-    setEditingSubcategory(null);
+    setEditingCategory(null);
     setEditForm({
       name: '',
-      category: '',
       metaTitle: '',
-      metaKeyword: '',
       metaDescription: '',
-      imageUrl: '',
+      metaKeyword: '',
+      category: ''
     });
   };
 
+  // ✅ Save Edit
   const saveEdit = async (id: string) => {
-    if (!editForm.name.trim()) {
-      alert('Name is required');
-      return;
+    try {
+
+      const res = await axiosInstance.put(
+        `/subcategories/${id}`,
+        {
+          name: editForm.name,
+          metaTitle: editForm.metaTitle,
+          metaDescription: editForm.metaDescription,
+          metaKeyword: editForm.metaKeyword,
+        }
+      );
+
+      if (res.status === 200) {
+        toast.success(`subcategory ${editForm.name} updated successfully!`);
+        cancelEdit();
+        fetchCategories(page);
+      }
+      else {
+        toast.error(`Failed to update subcategory ${editForm.name}`);
+      }
+    } catch (err) {
+      toast.error(`Failed to update subcategory ${editForm.name}`);
+      console.error('Update failed:', err);
     }
+  };
+
+  const stringLength = (str: string) => {
+    return (60 <= str.length);
+  }
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
     try {
-      const payload = {
-        name: editForm.name,
-        categoryId: editForm.category,
-        metaTitle: editForm.metaTitle,
-        metaKeyword: editForm.metaKeyword,
-        metaDescription: editForm.metaDescription,
-        imageUrl: editForm.imageUrl,
-      };
+      // const token = localStorage.getItem('accessToken');
 
-      console.log('Saving edit:', payload);
+      const payload = { sub_cat_name: name, mappedParent: category, metaTitle, metaDescription, metaKeyword };
 
-      await axios.put(`${API_BASE_URL}/subcategories/${id}`, payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      console.log(payload);
 
-          
+      const res = await axiosInstance.post(
+        '/subcategories',
+        payload,
 
-        },
-      });
+      );
+      res.status == 201 ?
+        toast.success("subcategory created successfully!")
+        : toast.error("Failed to create subcategory");
 
-      cancelEdit();
-      fetchSubcategories(token!, currentPage);
-    } catch (err: any) {
-      console.error('Update failed:', err?.response?.data || err.message);
-      alert('Update failed. See console for details.');
+      setAddCategory(false);
+      fetchCategories(page);
+    } catch (err) {
+      console.error('Failed to create subcategory', err);
+      toast.error('Failed to create subcategory. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-  //   <div className="p-6 max-w-6xl mx-auto">
-  //     <Sidebar />
-  //     <div className="flex justify-between items-center mb-6">
-  //       <h1 className="ml-80 text-2xl font-bold">Subcategories</h1>
-  //       <button
-  //         onClick={() => router.push('/subcategories/add')}
-  //         className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-  //       >
-  //         Add Subcategory
-  //       </button>
-  //     </div>
+    <div className="ml-60 flex min-h-screen bg-gray-50 relative">
+      {/* Sidebar */}
+      <Sidebar />
 
-  //     {loading ? (
-  //       <p>Loading subcategories...</p>
-  //     ) : subcategories.length === 0 ? (
-  //       <p>No subcategories found.</p>
-  //     ) : (
-  //       <div className="ml-80 overflow-x-auto">
-  //         <table className="w-full border border-gray-200">
-  //           <thead>
-  //             <tr className="bg-gray-200 text-left">
-  //               <th className="p-2">Image</th>
-  //               <th className="p-2">Name</th>
-  //               {/* <th className="p-2">Category</th> */}
-  //               <th className="p-2">Meta Title</th>
-  //               <th className="p-2">Meta Keywords</th>
-  //               <th className="p-2">Meta Description</th>
-  //               <th className="p-2">Actions</th>
-  //             </tr>
-  //           </thead>
-  //           <tbody>
-  //             {subcategories.map((subcat) => (
-  //               <tr key={subcat._id} className="border-t">
-  //                 <td className="p-2">
-  //                   {subcat.imageUrl ? (
-  //                     <img
-  //                       src={subcat.imageUrl}
-  //                       alt={subcat.name}
-  //                       className="w-16 h-16 object-cover rounded"
-  //                     />
-  //                   ) : (
-  //                     <span className="text-gray-400">No image</span>
-  //                   )}
-  //                 </td>
-
-  //                 {editingSubcategory === subcat._id ? (
-  //                   <>
-  //                     <td className="p-2">
-  //                       <input
-  //                         type="text"
-  //                         value={editForm.name}
-  //                         onChange={(e) =>
-  //                           setEditForm({ ...editForm, name: e.target.value })
-  //                         }
-  //                         className="border p-1 w-full"
-  //                       />
-  //                     </td>
-  //                     {/* <td className="p-2">{subcat.category?._id || '-'}</td> */}
-  //                     <td className="p-2">
-  //                       <input
-  //                         type="text"
-  //                         value={editForm.metaTitle}
-  //                         onChange={(e) =>
-  //                           setEditForm({ ...editForm, metaTitle: e.target.value })
-  //                         }
-  //                         className="border p-1 w-full"
-  //                       />
-  //                     </td>
-  //                     <td className="p-2">
-  //                       <input
-  //                         type="text"
-  //                         value={editForm.metaKeyword}
-  //                         onChange={(e) =>
-  //                           setEditForm({ ...editForm, metaKeyword: e.target.value })
-  //                         }
-  //                         className="border p-1 w-full"
-  //                       />
-  //                     </td>
-  //                     <td className="p-2">
-  //                       <input
-  //                         type="text"
-  //                         value={editForm.metaDescription}
-  //                         onChange={(e) =>
-  //                           setEditForm({
-  //                             ...editForm,
-  //                             metaDescription: e.target.value,
-  //                           })
-  //                         }
-  //                         className="border p-1 w-full"
-  //                       />
-  //                     </td>
-  //                     <td className="p-2 space-x-2">
-  //                       <button
-  //                         onClick={() => saveEdit(subcat._id)}
-  //                         className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
-  //                       >
-  //                         Save
-  //                       </button>
-  //                       <button
-  //                         onClick={cancelEdit}
-  //                         className="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600"
-  //                       >
-  //                         Cancel
-  //                       </button>
-  //                     </td>
-  //                   </>
-  //                 ) : (
-  //                   <>
-  //                     <td className="p-2">{subcat.name}</td>
-  //                     {/* <td className="p-2">{subcat.category?._id || '-'}</td> */}
-  //                     <td className="p-2">{subcat.metaTitle || '-'}</td>
-  //                     <td className="p-2">{subcat.metaKeyword || '-'}</td>
-  //                     <td className="p-2">{subcat.metaDescription || '-'}</td>
-  //                     <td className="p-2 space-x-2">
-  //                       <button
-  //                         onClick={() => startEdit(subcat)}
-  //                         className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600"
-  //                       >
-  //                         Edit
-  //                       </button>
-  //                       <button
-  //                         onClick={() => handleDelete(subcat._id)}
-  //                         className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-  //                       >
-  //                         Delete
-  //                       </button>
-  //                     </td>
-  //                   </>
-  //                 )}
-  //               </tr>
-  //             ))}
-  //           </tbody>
-  //         </table>
-  //       </div>
-  //     )}
-  //   </div>
-  <div className="ml-65 flex min-h-screen bg-gray-50">
-  {/* Sidebar */}
-  <Sidebar />
-
-  {/* Main Content */}
-  <div className="flex-1 p-6 max-w-6xl mx-auto">
-    {/* Header Section */}
-    <div className="flex justify-between items-center mb-6">
-      <h1 className="text-3xl font-bold text-gray-800">Subcategories</h1>
-      {userRole !== 'pepagora_manager' && (
-      <button
-        onClick={() => router.push('/subcategories/add')}
-        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition"
-      >
-        ➕ Add Subcategory
-      </button>
-      )}
-    </div>
-
-    {/* Loading / Empty State */}
-    {loading ? (
-      <div className="flex justify-center items-center h-40">
-        <p className="text-gray-500 text-lg">Loading subcategories...</p>
-      </div>
-    ) : subcategories.length === 0 ? (
-      <div className="text-center bg-white rounded-lg shadow p-10">
-        <p className="text-gray-600 text-lg">No subcategories found.</p>
-        <button
-          onClick={() => router.push('/subcategories/add')}
-          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          Add Your First Subcategory
-        </button>
-      </div>
-    ) : (
-      <>
-      <div className="overflow-x-auto bg-white rounded-lg shadow">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-100 text-gray-700 text-sm uppercase">
-              <th className="p-3 text-left">Image</th>
-              <th className="p-3 text-left">Sub category</th>
-              <th className="p-3 text-left">Meta Title</th>
-              <th className="p-3 text-left">Meta Keywords</th>
-              <th className="p-3 text-left">Meta Description</th>
-              {userRole !== 'pepagora_manager' && (
-              <th className="p-3 text-center">Actions</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {subcategories.map((subcat, index) => (
-              <tr
-                key={subcat._id}
-                className={`border-t hover:bg-gray-50 ${
-                  index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                }`}
-              >
-                {/* Image */}
-                <td className="p-3">
-                  {subcat.imageUrl ? (
-                     <a
-                      href={subcat.imageUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <img
-                        src={subcat.imageUrl}
-                        alt={subcat.name}
-                        className="w-14 h-14 object-cover rounded-lg shadow-sm hover:opacity-80 transition"
-                      />
-                    </a>
-                  ) : (
-                    <span className="text-gray-400 italic">No image</span>
-                  )}
-                </td>
-
-                {/* Editable or Read-only Fields */}
-                {editingSubcategory === subcat._id ? (
-                  <>
-                    <td className="p-3">
-                      <input
-                        type="text"
-                        value={editForm.name}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, name: e.target.value })
-                        }
-                        className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="p-3">
-                      <input
-                        type="text"
-                        value={editForm.metaTitle}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, metaTitle: e.target.value })
-                        }
-                        className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="p-3">
-                      <input
-                        type="text"
-                        value={editForm.metaKeyword}
-                        onChange={(e) =>
-                          setEditForm({ ...editForm, metaKeyword: e.target.value })
-                        }
-                        className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="p-3">
-                      <input
-                        type="text"
-                        value={editForm.metaDescription}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            metaDescription: e.target.value,
-                          })
-                        }
-                        className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="p-3 text-center space-x-2">
-                      <button
-                        onClick={() => saveEdit(subcat._id)}
-                        className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600"
-                      >
-                        💾 Save
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="bg-gray-500 text-white px-3 py-1 rounded-lg hover:bg-gray-600"
-                      >
-                        ✖ Cancel
-                      </button>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="p-3">{subcat.name}</td>
-                    <td className="p-3">{subcat.metaTitle || '-'}</td>
-                    <td className="p-3">{subcat.metaKeyword || '-'}</td>
-                    <td className="p-3">{subcat.metaDescription || '-'}</td>
-                    <td className="p-3 text-center flex justify-center gap-2">
-                      {userRole !== 'pepagora_manager' && ( 
-                        <>
-                      <button
-                        onClick={() => startEdit(subcat)}
-                        className="bg-yellow-500 text-white px-3 py-1 rounded-lg hover:bg-yellow-600"
-                      >
-                        ✏ Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(subcat._id)}
-                        className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600"
-                      >
-                        🗑 Delete
-                      </button>
-                      </>
-                          )}
-                    </td>
-                  </>
-                      )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-       {/* ✅ Pagination Controls */}
-            <div className="flex justify-center items-center gap-4 mt-6">
-              {/* <button
-                className="px-4 py-2 bg-gray-300 rounded disabled:opacity-50"
-                onClick={() => setCurrentPage(currentPage - 1)}
-                disabled={currentPage === 1}
-              >
-                Previous
-              </button>
-              <span className="text-gray-700">
-                Page {currentPage} of {totalPages}
-              </span>
+      {/* Main Content */}
+      <div className="flex-1 p-6 max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-center mb-6 w-full relative">
+          <h1 className="text-3xl font-bold text-gray-800">subcategories</h1>
+          {userRole !== 'pepagora_manager' && (
+            <>
               <button
-                className="px-4 py-2 bg-gray-300 rounded disabled:opacity-50"
-                onClick={() => setCurrentPage(currentPage + 1)}
-                disabled={currentPage === totalPages}
+                onClick={() => setAddCategory(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition absolute right-4"
               >
-                Next
-              </button> */}
-              {totalPages > 1 && (
-  <div className="flex justify-center items-center gap-2 mt-6 flex-wrap">
-    {/* Prev Button */}
-    <button
-      className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-      onClick={() => setCurrentPage(currentPage - 1)}
-      disabled={currentPage === 1}
-    >
-      &laquo; Prev
-    </button>
+                Add Subategory
+              </button>
+              {addCategory && (
+                <div className='fixed inset-0 z-50 flex items-center justify-center' onClick={()=>setAddCategory(false)}>
 
-    {/* Page Numbers */}
-    {getPaginationRange(currentPage, totalPages).map((p, idx) =>
-      p === '...' ? (
-        <span key={idx} className="px-3 py-1 text-gray-500">
-          ...
-        </span>
-      ) : (
-        <button
-          key={idx}
-          onClick={() => setCurrentPage(p as number)}
-          className={`px-3 py-1 rounded ${
-            p === currentPage
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-          }`}
-        >
-          {p}
-        </button>
-      )
-    )}
 
-    {/* Next Button */}
-    <button
-      className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-      onClick={() => setCurrentPage(currentPage + 1)}
-      disabled={currentPage === totalPages}
-    >
-      Next &raquo;
-    </button>
-  </div>
-)}
+                  <div className="p-6 max-w-3xl mx-auto bg-amber-50 border-2 relative" >
+                    <h1 className="text-2xl font-bold mb-6 text-center">Add subcategory</h1>
+                    <button className='absolute top-2 right-4 text-xl hover:cursor-pointer' onClick={() => setAddCategory(false)}>x</button>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      <input
+                        type="text"
+                        placeholder="subcategory Name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full p-2 border rounded"
+                        required
+                      />
+                      <div>
+                        <label className="block font-medium">Main Category</label>
+                        <select
+                          value={category || ' '}
+                          onChange={(e) => setCategory(e.target.value)}
+                          className="border border-gray-300 rounded px-3 py-2 w-full"
+                          required
+                        >
+                          <option value="">-- Select Category --</option>
+                          {subcategories.map((subcat) => (
+                            <option key={subcat._id} value={subcat._id}>
+                              {subcat.main_cat_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
+                      <input
+                        type="text"
+                        placeholder="Meta Title"
+                        value={metaTitle}
+                        onChange={(e) => setMetaTitle(e.target.value)}
+                        className="w-full p-2 border rounded"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Meta Keywords"
+                        value={metaKeyword}
+                        onChange={(e) => setMetaKeyword(e.target.value)}
+                        className="w-full p-2 border rounded"
+                      />
+                      <textarea
+                        placeholder="Meta Description"
+                        value={metaDescription}
+                        onChange={(e) => setMetaDescription(e.target.value)}
+                        className="w-full p-2 border rounded"
+                        rows={3}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Image URL (e.g. https://example.com/image.jpg)"
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        className="w-full p-2 border rounded"
+                      />
+                      <div className="flex justify-center">
+                        <button
+                          type="submit"
+                          // disabled={loading}
+                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                        // onClick={() => setAddCategory(false)}
+                        >
+                          Add subcategory
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+              )}
+            </>
+          )}
+
+        </div>
+
+        {/* Loading / Empty State */}
+        {loading ? (
+          <div className="flex justify-center items-center h-40">
+            <p className="text-gray-500">Loading subcategories...</p>
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="text-center bg-white rounded-lg shadow p-10">
+            <p className="text-gray-600 text-lg">No subcategories found.</p>
+          </div>
+        ) : (
+          <>
+            {/* Table */}
+            <div className="overflow-x-auto bg-white rounded-lg shadow">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 text-gray-700 text-sm uppercase">
+                    <th className="p-3 text-left">Image</th>
+                    <th className="p-3 text-left">categories</th>
+
+                    <th className="p-3 text-left">subcategories</th>
+                    <th className="p-3 text-left">Meta Title</th>
+                    <th className="p-3 text-left">Meta Keywords</th>
+                    <th className="p-3 text-left">Meta Description</th>
+                    {userRole !== 'pepagora_manager' && (
+                      <th className="p-3 text-center">Actions</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {categories.map((cat, index) => (
+                    <tr
+                      key={cat._id}
+                      className={`border-t hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                        }`}
+                    >
+                      {/* Image */}
+                      <td className="p-3">
+                        {((cat.sub_cat_img_url != "null") && (cat.sub_cat_img_url != undefined)) ? (
+                          <a
+                            href={cat.sub_cat_img_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <img
+                              src={cat.sub_cat_img_url}
+                              alt={cat.sub_cat_name}
+                              className="w-14 h-14 object-cover rounded-lg shadow-sm hover:opacity-80 transition"
+                            />
+                          </a>
+                        ) : (
+                          <MdImageNotSupported className="text-gray-400 w-14 h-14" />
+                        )}
+                      </td>
+                      {/* <td>{cat}</td> */}
+
+                      <td className="p-3 overflow-x-hidden max-w-72">{subcategories.map((s) => (
+                        (s._id === cat.mappedParent) ? s.main_cat_name : ""
+                      ))}</td>
+                      {editingCategory === cat._id ? (
+                        <>
+                          <>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.metaTitle || '-'}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.metaKeyword || '-'}</td>
+                            <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.sub_cat_name}</td>
+                            <td className="p-3 w-72 text-left h-20">{cat.metaDescription || '-'}</td>
+                            {userRole !== 'pepagora_manager' && (
+                              <td className="p-3 text-center flex justify-center gap-2">
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditingCategory(cat._id);
+                                      setEditForm({
+                                        name: cat.sub_cat_name,
+                                        metaTitle: cat.metaTitle || '',
+                                        metaKeyword: cat.metaKeyword || '',
+                                        metaDescription: cat.metaDescription || '',
+                                        category: (() => {
+                                          const match = subcategories.find((s) => s._id === cat.mappedParent);
+                                          return match ? match.main_cat_name : "";
+                                        })()
+                                      });
+                                      setShowEditModal(true);
+                                    }}
+                                    className="bg-green-500 text-white px-3 py-2 rounded-2xl hover:cursor-pointer"
+                                  >
+                                    <div className='flex'>
+                                      <TbEdit className='mt-1 mx-1' />Edit
+                                    </div>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setCategoryToDelete(cat._id);
+                                      setShowDeleteModal(true);
+                                    }}
+                                    className='bg-red-500 rounded-2xl px-3 py-2 hover:cursor-pointer text-white'
+
+                                  >
+                                    <div className='flex'>
+                                      <RiDeleteBin6Line className='mt-1 mx-1' />Delete
+                                    </div>
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+
+                          </>
+                          {showEditModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center">
+                              <div className="bg-amber-50 rounded-lg shadow-2xl p-6 w-full max-w-2xl relative border-2">
+                                <h2 className="text-xl font-bold mb-4">Edit subcategory</h2>
+
+                                <div className="space-y-3">
+                                  <div className='flex'>
+                                  <label className='font-semibold p-2 w-1/3'>Category:</label>
+                                  <input type='text'
+                                    value={editForm.category}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="subcategory Name"
+                                  />
+                                  </div>
+                                  <div className='flex'>
+                                  <label className='font-semibold p-2 w-1/3'>Sub Category:</label>
+                                  <input
+                                    type="text"
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="subcategory Name"
+                                  />
+                                  </div>
+                                  <div className='flex'>
+                                  <label className='font-semibold p-2 w-1/3'>Meta Title:</label>
+                                  <input
+                                    type="text"
+                                    value={editForm.metaTitle}
+                                    onChange={(e) => setEditForm({ ...editForm, metaTitle: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Meta Title"
+                                  />
+                                  </div>
+                                  <div className='flex'>
+                                  <label className='font-semibold p-2 w-1/3'>Meta Keyword:</label>
+                                  <input
+                                    type="text"
+                                    value={editForm.metaKeyword}
+                                    onChange={(e) => setEditForm({ ...editForm, metaKeyword: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Meta Keyword"
+                                  />
+                                  </div>
+                                  <div className='flex'>
+                                  <label className='font-semibold p-2 w-1/3'>Meta Description:</label>
+                                  <input
+                                    type="text"
+                                    value={editForm.metaDescription}
+                                    onChange={(e) => setEditForm({ ...editForm, metaDescription: e.target.value })}
+                                    className="border p-2 rounded w-full"
+                                    placeholder="Meta Description"
+                                  />
+                                  </div>
+
+                                </div>
+
+                                <div className="flex justify-end gap-2 mt-6">
+                                  <button
+                                    onClick={() => {
+                                      saveEdit(editingCategory!);
+                                      setShowEditModal(false);
+                                      setEditingCategory(null);
+                                    }}
+                                    className="bg-green-600 text-white p-2 rounded flex"
+                                  >
+                                    <LuSave className='text-sm mt-1' /> <p className="text-sm px-2">Save</p>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setShowEditModal(false);
+                                      cancelEdit();
+                                    }}
+                                    className="bg-red-500 text-white px-4 pb-2 rounded text-lg"
+                                  >
+                                    x <span className="text-sm">Cancel</span>
+                                  </button>
+                                </div>
+
+                                {/* Close button in corner */}
+                                <button
+                                  className="absolute top-2 right-3 text-gray-400 hover:text-gray-600 text-2xl"
+                                  onClick={() => {
+                                    setShowEditModal(false);
+                                    cancelEdit();
+                                  }}
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+
+
+                        </>
+                      ) : (
+                        <>
+                          <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.sub_cat_name}</td>
+                          <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.metaTitle || '-'}</td>
+                          <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.metaKeyword || '-'}</td>
+                          <td className={`p-3 w-72 text-left h-20`}>
+                            <div className={`${viewReadMore ? 'max-h-max' : 'overflow-y-hidden max-h-14'}`}>
+                              {cat.metaDescription || '-'}
+                            </div>
+                            {stringLength(cat.metaDescription || '') && (
+                              <p
+                                className="text-blue-500 cursor-pointer text-xs mt-1"
+                                onClick={() => setViewReadMore((prev) => !prev)}
+                              >
+                                Read {viewReadMore ? 'less' : 'more'}...
+                              </p>
+                            )}
+                          </td>
+
+
+                          {userRole !== 'pepagora_manager' && (
+                            <td className="p-3 text-center flex justify-center gap-2 max-w-72">
+                              <div className='flex flex-col'>
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingCategory(cat._id);
+                                    setEditForm({
+                                      name: cat.sub_cat_name,
+                                      metaTitle: cat.metaTitle || '',
+                                      metaKeyword: cat.metaKeyword || '',
+                                      metaDescription: cat.metaDescription || '',
+                                      // imageUrl: cat.sub_cat_img_url || '',
+                                      category: (() => {
+                                        const match = subcategories.find((s) => s._id === cat.mappedParent);
+                                        return match ? match.main_cat_name : "";
+                                      })()
+                                    });
+                                    setShowEditModal(true);
+                                  }}
+                                  className="bg-green-500 text-white px-3 py-2 rounded-2xl hover:cursor-pointer"
+                                >
+                                  <div className='flex'>
+                                    <TbEdit className='mt-1 mx-1' />Edit
+                                  </div>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setCategoryToDelete(cat._id);
+                                    setShowDeleteModal(true);
+                                    console.log("I was clicked")
+                                  }}
+                                  className='bg-red-500 rounded-2xl px-3 py-2 hover:cursor-pointer text-white flex'
+
+                                >
+                                  <div className='flex'>
+                                    <RiDeleteBin6Line className='mt-1 mx-1' />Delete
+                                  </div>
+                                </button>
+                              </div>
+                              <button className='bg-yellow-400 text-white mt-2 rounded-2xl p-2 flex w-36 ml-4' onMouseEnter={()=>{
+                                setSubcategoryId(cat._id)
+                                setProductView(true)
+                              }} 
+                              onMouseLeave={()=>{
+                                setSubcategoryId('')
+                                setProductView(false)
+                              }}
+                              >
+                                <FaRegEye className='m-1'/> View Products
+                              </button>
+                              </div>
+                            </td>
+                          )}
+                        </>
+                      )}
+                      {(productView && subCategoryId === cat._id) && (
+                        <div className='bg-amber-200 border text-black absolute p-2 w-auto'>
+                         
+                        </div>
+                      )}
+                      {showDeleteModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center border-gray-400">
+                          <div className="bg-amber-50 rounded-lg shadow-sm p-6 w-full max-w-md text-center relative border-2">
+                            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                              Confirm Deletion
+                            </h2>
+                            <p className="text-gray-600 mb-6">
+                              Do you want to delete this category?
+                            </p>
+
+                            <div className="flex justify-center gap-4">
+                              <button
+                                onClick={async () => {
+                                  if (categoryToDelete) {
+                                    await handleDelete(categoryToDelete);
+                                    setShowDeleteModal(false);
+                                    setCategoryToDelete(null);
+                                  }
+                                }}
+                                className="bg-red-600 hover:bg-red-700 animate-pulse text-white px-4 py-2 rounded"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowDeleteModal(false);
+                                  setCategoryToDelete(null);
+                                }}
+                                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+
+                            {/* Close (X) button */}
+                            <button
+                              onClick={() => {
+                                setShowDeleteModal(false);
+                                setCategoryToDelete(null);
+                              }}
+                              className="absolute top-2 right-3 text-gray-400 hover:text-gray-600 text-2xl"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-      </>
-      
-    )}
-  </div>
-</div>
+            {/* ✅ Pagination Controls */}
+            {/* <div className="flex justify-center items-center gap-4 mt-6">
 
+              {totalPages > 1 && (
+                <div className="flex justify-center items-center gap-2 mt-6 flex-wrap">
+                  {/* Prev Button */}
+            {/* <button
+                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                    onClick={() => setPage(page - 1)}
+                    disabled={page === 1}
+                  >
+                    &laquo; Prev
+                  </button> */}
+
+            {/* Page Numbers */}
+            {/* {getPaginationRange(page, totalPages).map((p, idx) =>
+                    p === '...' ? (
+                      <span key={idx} className="px-3 py-1 text-gray-500">
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={idx}
+                        onClick={() => setPage(p as number)}
+                        className={`px-3 py-1 rounded ${p === page
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )} */}
+
+            {/* Next Button */}
+            {/* <button
+                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+                    onClick={() => setPage(page + 1)}
+                    disabled={page === totalPages}
+                  >
+                    Next &raquo;
+                  </button> */}
+            {/* </div>
+              )} */}
+
+            {/* </div>  */}
+
+
+
+            <div className="flex items-center justify-between flex-wrap mt-6 gap-4">
+              {/* --- Pagination Buttons --- */}
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    if (page > 1) {
+                      setPage(page - 1);
+                      fetchCategories(page - 1);
+                    }
+                  }}
+                  disabled={page === 1}
+                  className="px-3 py-1 rounded border disabled:opacity-50"
+                >
+                  Prev
+                </button>
+
+                {getPaginationRange(page, totalPages, 1).map((p, idx) =>
+                  p === '...' ? (
+                    <span key={idx} className="px-3 py-1">...</span>
+                  ) : (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setPage(Number(p));
+                        fetchCategories(Number(p));
+                      }}
+                      className={`px-3 py-1 rounded border ${p === page ? 'bg-blue-600 text-white' : ''
+                        }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+
+                <button
+                  onClick={() => {
+                    if (page < totalPages) {
+                      setPage(page + 1);
+                      fetchCategories(page + 1);
+                    }
+                  }}
+                  disabled={page === totalPages}
+                  className="px-3 py-1 rounded border disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+
+              {/* --- Go To Page Input --- */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  placeholder="Page"
+                  className="w-16 px-2 py-1 text-sm border rounded text-center"
+                  value={goToPageInput}
+                  onChange={(e) => setGoToPageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const page = Number(goToPageInput);
+                      if (page >= 1 && page <= totalPages) {
+                        setPage(page);
+                        fetchCategories(page);
+                        setGoToPageInput('');
+                      }
+                    }
+                  }}
+                />
+                <button
+                  className="bg-blue-600 text-white text-sm px-3 py-1 rounded hover:bg-blue-700"
+                  onClick={() => {
+                    const page = Number(goToPageInput);
+                    if (page >= 1 && page <= totalPages) {
+                      setPage(page);
+                      fetchCategories(page);
+                      setGoToPageInput('');
+                    }
+                  }}
+                >
+                  Go
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

@@ -1,9 +1,12 @@
-// lib/api.ts
-import axios from 'axios';
+// lib/api.ts or utils/auth.ts
+import  axiosInstance from "./axiosInstance";
 
-const api = axios.create({
-  baseURL: 'http://localhost:4000', // ✅ Your NestJS API base URL
-  withCredentials: true,           // ✅ Important for sending refresh token cookies
-});
-
-export default api;
+export const logoutUser = async (userId: string) => {
+  try {
+    console.log("Logging out user with ID:", userId);
+    const response = await axiosInstance.post('/auth/logout', { userId });
+    return response.data;
+  } catch (error: any) {
+    throw error.response?.data || { message: 'Logout failed' };
+  }
+};

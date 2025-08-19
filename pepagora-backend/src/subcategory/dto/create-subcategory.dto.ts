@@ -1,11 +1,19 @@
-import { IsString, IsMongoId, IsOptional, IsUrl } from 'class-validator';
+import { IsString,IsArray, IsMongoId, IsOptional, IsUrl } from 'class-validator';
 
 export class CreateSubcategoryDto {
   @IsString()
-  name: string;
+  sub_cat_name: string;
 
   @IsMongoId()
-  category: string;
+  mappedParent: string;
+
+  @IsOptional()
+  @IsString()
+  uniqueId?: string;
+
+  @IsOptional()
+  @IsString()
+  liveUrl?: string;
 
   @IsOptional()
   @IsString()
@@ -22,4 +30,9 @@ export class CreateSubcategoryDto {
   @IsOptional()
   @IsUrl({}, { message: 'Image URL must be a valid URL' })
   imageUrl?: string; // New field for S3 image URL
+
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    mappedChildren?: string[];
 }

@@ -1,6 +1,19 @@
-const ACCESS_TOKEN_KEY = 'accessToken';
+// lib/auth.ts
 
-export const saveToken = (token: string) => localStorage.setItem(ACCESS_TOKEN_KEY, token);
-export const getToken = () => (typeof window !== 'undefined' ? localStorage.getItem(ACCESS_TOKEN_KEY) : null);
-export const clearToken = () => localStorage.removeItem(ACCESS_TOKEN_KEY);
-export const isAuthenticated = () => !!getToken();
+export const saveToken = (accessToken: string, userId: string, role: string) => {
+  localStorage.setItem('accessToken', accessToken);
+  localStorage.setItem('userId', userId);  
+  localStorage.setItem('role', role);
+
+  // console.log("Saving userId:", userId);
+  // console.log("Saving role:", role);
+
+};
+
+export const getUserId = () => localStorage.getItem('userId');
+
+export const clearAuthData = () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('role');
+};

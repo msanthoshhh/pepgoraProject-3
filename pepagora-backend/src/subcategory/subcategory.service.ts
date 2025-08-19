@@ -9,7 +9,7 @@ export class SubcategoryService {
   constructor(@InjectModel(Subcategory.name) private subcategoryModel: Model<Subcategory>) {}
 
   async create(dto: CreateSubcategoryDto) {
-    const existingSubcategory = await this.subcategoryModel.findOne({ name: dto.name, category: dto.category });
+    const existingSubcategory = await this.subcategoryModel.findOne({ name: dto.sub_cat_name, mappedParent: dto.mappedParent });
     if (existingSubcategory) {
       throw new ConflictException('Subcategory with this name already exists in the selected category');
     }
@@ -63,7 +63,7 @@ export class SubcategoryService {
 
 
   async findOne(id: string) {
-    const subcategory = await this.subcategoryModel.findById(id).populate('category');
+    const subcategory = await this.subcategoryModel.findById(id).populate('mappedParent');
     if (!subcategory) throw new NotFoundException('Subcategory not found');
     return subcategory;
   }

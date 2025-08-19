@@ -1,14 +1,22 @@
 import { z } from 'zod';
 
+const objectIdSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{24}$/, { message: 'Each mappedChild must be a valid ObjectId' });
+
 export const createSubcategorySchema = z.object({
-  name: z
+  sub_cat_name: z
     .string()
     .min(2, { message: 'Subcategory name must be at least 2 characters long' })
     .max(50, { message: 'Subcategory name must be less than 50 characters' }),
 
-  category: z
+  uniqueId: z.string().optional(),
+  liveUrl: z.string().optional(),
+
+  mappedParent: z
     .string()
     .regex(/^[0-9a-fA-F]{24}$/, { message: 'Invalid MongoDB ObjectId' }),
+    
 
   metaTitle: z.string().optional(),
   metaKeyword: z.string().optional(),
@@ -18,6 +26,7 @@ export const createSubcategorySchema = z.object({
     .string()
     .url({ message: 'Image URL must be a valid URL' })
     .optional(),
+    mappedChildren: z.array(objectIdSchema).optional(),
 });
 
 // TypeScript type inferred from Zod
