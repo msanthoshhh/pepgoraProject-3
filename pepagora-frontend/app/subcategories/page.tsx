@@ -15,13 +15,13 @@ import { LuSave } from "react-icons/lu";
 import { FaRegEye } from "react-icons/fa";
 import { set } from 'zod';
 
-type Subcategory = {
+type Category = {
   _id: string;
   main_cat_name: string;
   // categoryId: string;
 }
 
-type Category = {
+type subCategory = {
   _id: string;
   sub_cat_name: string;
   mappedParent: string;
@@ -29,6 +29,7 @@ type Category = {
   metaKeyword?: string;
   metaDescription?: string;
   sub_cat_img_url?: string;
+  mappedChildren?:string[];
 };
 
 type TokenPayload = {
@@ -44,19 +45,22 @@ type Product = {
   name: string;
 }
 
-export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
+let p:any[] = []
+
+export default function subcategoriesPage() {
+  const [subCategories, setSubCategories] = useState<subCategory[]>([]);
   const [products,setProducts]=useState<Product[]>([])
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
-  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editingSubcategory, setEditingSubcategory] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
-  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [SubCategoryToDelete, setSubCategoryToDelete] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [productView, setProductView] = useState<boolean>();
   const [subCategoryId, setSubcategoryId] = useState<string | null>('');
+  
 
   // const router = useRouter();
   const [name, setName] = useState('');
@@ -66,7 +70,7 @@ export default function CategoriesPage() {
   const [metaDescription, setMetaDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
 
-  const [addCategory, setAddCategory] = useState(false);
+  const [SubaddCategory, setSubaddCategory] = useState(false);
   const [viewReadMore, setViewReadMore] = useState(false);
   const [goToPage, setGoToPage] = useState('');
   const [goToPageInput, setGoToPageInput] = useState('');
@@ -104,45 +108,52 @@ export default function CategoriesPage() {
     }
   }, []);
 
-  // const fetchProducts =async (id:string)=>{
-  //   setLoading(true); 
-  //   try{
-  //     const res=axiosInstance.get(`/products/${id}`)
-  //     const data=res; 
-  //     cons
-  //   }
-  // }
+  const fetchProducts =async (id:string[])=>{
+    // setLoading(true); 
+    p=[]
+    try{ 
+      for(let i=0;i<id.length;i++){
+        const res = await axiosInstance.get(`/products/${id[i]}`) 
+        p.push(res?res.data.data.name:'');
+      }
+      console.log(p);
+      p.length>0?setProductView(true):setProductView(false);
+    } 
+    catch(e){
+      toast.error("Products unavailable")
+    }
+  }
 
   // useEffect(()=>{
-  //   fetchProducts
+  //   fetchProducts("689a28e3b68f8dc743c9a4a9")
 
   // },[])
 
   // ✅ Get token from localStorage
   useEffect(() => {
-    fetchCategories(page);
+    fetchSubcategories(page);
   }, [page]);
 
   useEffect(() => {
-    fetchSubcategories();
+    fetchCategories();
   }, [])
 
-  const fetchSubcategories = async () => {
+  const fetchCategories = async () => {
     setLoading(true);
     try {
       const res = await axiosInstance.get('/categories');
       console.log('Fetched subcatefghgfgories:', res.data.data.data);
       const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
-      setSubcategories(data);
+      setCategories(data);
     } catch (err) {
       console.error('Error fetching subcategories:', err);
-      setSubcategories([]);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchCategories = async (currentPage: number) => {
+  const fetchSubcategories = async (currentPage: number) => {
     setLoading(true);
     try {
       const res = await axiosInstance.get('/subcategories', {
@@ -151,11 +162,11 @@ export default function CategoriesPage() {
 
       console.log('Fetched categories:', res.data.data.data);
       const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
-      setCategories(data);
+      setSubCategories(data);
       setTotalPages(res.data.data.pagination.totalPages || 1);
     } catch (err) {
       console.error('Error fetching categories:', err);
-      setCategories([]);
+      setSubCategories([]);
       if (axios.isAxiosError(err) && err.response?.status === 401) {
         router.push('/login');
       }
@@ -163,8 +174,6 @@ export default function CategoriesPage() {
       setLoading(false);
     }
   };
-
-
 
   // ✅ Delete Category
   const handleDelete = async (id: string) => {
@@ -181,7 +190,7 @@ export default function CategoriesPage() {
       if (categories.length === 1 && page > 1) {
         setPage(page - 1);
       } else {
-        fetchCategories(page);
+        fetchSubcategories(page);
       }
     } catch (err) {
       toast.error(`Failed to delete subcategory ${id}`);
@@ -189,20 +198,9 @@ export default function CategoriesPage() {
     }
   };
 
-  // // ✅ Start Edit Mode
-  // const startEdit = (cat: Category) => {
-  //   setEditingCategory(cat._id);
-  //   setEditForm({
-  //     name: cat.sub_cat_name,
-  //     metaTitle: cat.metaTitle || '',
-  //     metaDescription: cat.metaDescription || '',
-  //     metaKeyword: cat.metaKeyword || '',
-  //   });
-  // };
-
   // ✅ Cancel Edit
   const cancelEdit = () => {
-    setEditingCategory(null);
+    setEditingSubcategory(null);
     setEditForm({
       name: '',
       metaTitle: '',
@@ -219,7 +217,7 @@ export default function CategoriesPage() {
       const res = await axiosInstance.put(
         `/subcategories/${id}`,
         {
-          name: editForm.name,
+          sub_cat_name: editForm.name,
           metaTitle: editForm.metaTitle,
           metaDescription: editForm.metaDescription,
           metaKeyword: editForm.metaKeyword,
@@ -229,7 +227,7 @@ export default function CategoriesPage() {
       if (res.status === 200) {
         toast.success(`subcategory ${editForm.name} updated successfully!`);
         cancelEdit();
-        fetchCategories(page);
+        fetchSubcategories(page);
       }
       else {
         toast.error(`Failed to update subcategory ${editForm.name}`);
@@ -264,8 +262,8 @@ export default function CategoriesPage() {
         toast.success("subcategory created successfully!")
         : toast.error("Failed to create subcategory");
 
-      setAddCategory(false);
-      fetchCategories(page);
+      setSubaddCategory(false);
+      fetchSubcategories(page);
     } catch (err) {
       console.error('Failed to create subcategory', err);
       toast.error('Failed to create subcategory. Please try again.');
@@ -283,22 +281,22 @@ export default function CategoriesPage() {
       <div className="flex-1 p-6 max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex justify-center mb-6 w-full relative">
-          <h1 className="text-3xl font-bold text-gray-800">subcategories</h1>
+          <h1 className="text-3xl font-bold text-gray-800">Sub Categories</h1>
           {userRole !== 'pepagora_manager' && (
             <>
               <button
-                onClick={() => setAddCategory(true)}
+                onClick={() => setSubaddCategory(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md transition absolute right-4"
               >
                 Add Subategory
               </button>
-              {addCategory && (
-                <div className='fixed inset-0 z-50 flex items-center justify-center' onClick={()=>setAddCategory(false)}>
+              {SubaddCategory && (
+                <div className='fixed inset-0 z-50 flex items-center justify-center'>
 
 
                   <div className="p-6 max-w-3xl mx-auto bg-amber-50 border-2 relative" >
                     <h1 className="text-2xl font-bold mb-6 text-center">Add subcategory</h1>
-                    <button className='absolute top-2 right-4 text-xl hover:cursor-pointer' onClick={() => setAddCategory(false)}>x</button>
+                    <button className='absolute top-2 right-4 text-xl hover:cursor-pointer' onClick={() => setSubaddCategory(false)}>x</button>
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <input
                         type="text"
@@ -317,7 +315,7 @@ export default function CategoriesPage() {
                           required
                         >
                           <option value="">-- Select Category --</option>
-                          {subcategories.map((subcat) => (
+                          {categories.map((subcat) => (
                             <option key={subcat._id} value={subcat._id}>
                               {subcat.main_cat_name}
                             </option>
@@ -358,7 +356,7 @@ export default function CategoriesPage() {
                           type="submit"
                           // disabled={loading}
                           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                        // onClick={() => setAddCategory(false)}
+                        
                         >
                           Add subcategory
                         </button>
@@ -401,7 +399,7 @@ export default function CategoriesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {categories.map((cat, index) => (
+                  {subCategories.map((cat, index) => (
                     <tr
                       key={cat._id}
                       className={`border-t hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
@@ -427,10 +425,10 @@ export default function CategoriesPage() {
                       </td>
                       {/* <td>{cat}</td> */}
 
-                      <td className="p-3 overflow-x-hidden max-w-72">{subcategories.map((s) => (
+                      <td className="p-3 overflow-x-hidden max-w-72">{categories.map((s) => (
                         (s._id === cat.mappedParent) ? s.main_cat_name : ""
                       ))}</td>
-                      {editingCategory === cat._id ? (
+                      {editingSubcategory === cat._id ? (
                         <>
                           <>
                             <td className="p-3 overflow-x-hidden max-w-72 text-left">{cat.metaTitle || '-'}</td>
@@ -442,14 +440,14 @@ export default function CategoriesPage() {
                                 <div className="flex gap-2 mt-2">
                                   <button
                                     onClick={() => {
-                                      setEditingCategory(cat._id);
+                                      setEditingSubcategory(cat._id);
                                       setEditForm({
                                         name: cat.sub_cat_name,
                                         metaTitle: cat.metaTitle || '',
                                         metaKeyword: cat.metaKeyword || '',
                                         metaDescription: cat.metaDescription || '',
                                         category: (() => {
-                                          const match = subcategories.find((s) => s._id === cat.mappedParent);
+                                          const match = categories.find((s) => s._id === cat.mappedParent);
                                           return match ? match.main_cat_name : "";
                                         })()
                                       });
@@ -463,7 +461,7 @@ export default function CategoriesPage() {
                                   </button>
                                   <button
                                     onClick={() => {
-                                      setCategoryToDelete(cat._id);
+                                      setSubCategoryToDelete(cat._id);
                                       setShowDeleteModal(true);
                                     }}
                                     className='bg-red-500 rounded-2xl px-3 py-2 hover:cursor-pointer text-white'
@@ -538,9 +536,9 @@ export default function CategoriesPage() {
                                 <div className="flex justify-end gap-2 mt-6">
                                   <button
                                     onClick={() => {
-                                      saveEdit(editingCategory!);
+                                      saveEdit(editingSubcategory!);
                                       setShowEditModal(false);
-                                      setEditingCategory(null);
+                                      setEditingSubcategory(null);
                                     }}
                                     className="bg-green-600 text-white p-2 rounded flex"
                                   >
@@ -600,7 +598,7 @@ export default function CategoriesPage() {
                               <div className="flex gap-2 mt-2">
                                 <button
                                   onClick={() => {
-                                    setEditingCategory(cat._id);
+                                    setEditingSubcategory(cat._id);
                                     setEditForm({
                                       name: cat.sub_cat_name,
                                       metaTitle: cat.metaTitle || '',
@@ -608,7 +606,7 @@ export default function CategoriesPage() {
                                       metaDescription: cat.metaDescription || '',
                                       // imageUrl: cat.sub_cat_img_url || '',
                                       category: (() => {
-                                        const match = subcategories.find((s) => s._id === cat.mappedParent);
+                                        const match = categories.find((s) => s._id === cat.mappedParent);
                                         return match ? match.main_cat_name : "";
                                       })()
                                     });
@@ -622,7 +620,7 @@ export default function CategoriesPage() {
                                 </button>
                                 <button
                                   onClick={() => {
-                                    setCategoryToDelete(cat._id);
+                                    setSubCategoryToDelete(cat._id);
                                     setShowDeleteModal(true);
                                     console.log("I was clicked")
                                   }}
@@ -634,14 +632,13 @@ export default function CategoriesPage() {
                                   </div>
                                 </button>
                               </div>
-                              <button className='bg-yellow-400 text-white mt-2 rounded-2xl p-2 flex w-36 ml-4' onMouseEnter={()=>{
+                              <button className='bg-yellow-400 text-white mt-2 rounded-2xl p-2 flex w-36 ml-4 hover:cursor-pointer' onClick={()=>{
                                 setSubcategoryId(cat._id)
-                                setProductView(true)
+                                p.length==0?fetchProducts(cat.mappedChildren?cat.mappedChildren:[]) : (()=>{
+                                  p=[];
+                                  setProductView(false);
+                                })()
                               }} 
-                              onMouseLeave={()=>{
-                                setSubcategoryId('')
-                                setProductView(false)
-                              }}
                               >
                                 <FaRegEye className='m-1'/> View Products
                               </button>
@@ -651,8 +648,18 @@ export default function CategoriesPage() {
                         </>
                       )}
                       {(productView && subCategoryId === cat._id) && (
-                        <div className='bg-amber-200 border text-black absolute p-2 w-auto'>
-                         
+                        <div className='fixed inset-0 flex items-center justify-center'>
+
+                        <div className='bg-amber-200 border text-black p-2 max-w-2xl max-h-80 overflow-y-scroll relative'>
+                          <h1 className='text-center text-xl font-semibold underline p-2'>Product Details</h1>
+                         {p.map((i)=>(
+                         <li>{i}</li>
+                         ))}
+                         <p className='text-xl absolute top-0 right-2 hover:cursor-pointer' onClick={()=>{
+                          p=[];
+                          setProductView(false);
+                          }}>X</p>
+                        </div>
                         </div>
                       )}
                       {showDeleteModal && (
@@ -668,10 +675,10 @@ export default function CategoriesPage() {
                             <div className="flex justify-center gap-4">
                               <button
                                 onClick={async () => {
-                                  if (categoryToDelete) {
-                                    await handleDelete(categoryToDelete);
+                                  if (SubCategoryToDelete) {
+                                    await handleDelete(SubCategoryToDelete);
                                     setShowDeleteModal(false);
-                                    setCategoryToDelete(null);
+                                    setSubCategoryToDelete(null);
                                   }
                                 }}
                                 className="bg-red-600 hover:bg-red-700 animate-pulse text-white px-4 py-2 rounded"
@@ -681,7 +688,7 @@ export default function CategoriesPage() {
                               <button
                                 onClick={() => {
                                   setShowDeleteModal(false);
-                                  setCategoryToDelete(null);
+                                  setSubCategoryToDelete(null);
                                 }}
                                 className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
                               >
@@ -693,7 +700,7 @@ export default function CategoriesPage() {
                             <button
                               onClick={() => {
                                 setShowDeleteModal(false);
-                                setCategoryToDelete(null);
+                                setSubCategoryToDelete(null);
                               }}
                               className="absolute top-2 right-3 text-gray-400 hover:text-gray-600 text-2xl"
                             >
@@ -708,53 +715,7 @@ export default function CategoriesPage() {
               </table>
             </div>
 
-            {/* ✅ Pagination Controls */}
-            {/* <div className="flex justify-center items-center gap-4 mt-6">
-
-              {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 mt-6 flex-wrap">
-                  {/* Prev Button */}
-            {/* <button
-                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-                    onClick={() => setPage(page - 1)}
-                    disabled={page === 1}
-                  >
-                    &laquo; Prev
-                  </button> */}
-
-            {/* Page Numbers */}
-            {/* {getPaginationRange(page, totalPages).map((p, idx) =>
-                    p === '...' ? (
-                      <span key={idx} className="px-3 py-1 text-gray-500">
-                        ...
-                      </span>
-                    ) : (
-                      <button
-                        key={idx}
-                        onClick={() => setPage(p as number)}
-                        className={`px-3 py-1 rounded ${p === page
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                          }`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  )} */}
-
-            {/* Next Button */}
-            {/* <button
-                    className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-                    onClick={() => setPage(page + 1)}
-                    disabled={page === totalPages}
-                  >
-                    Next &raquo;
-                  </button> */}
-            {/* </div>
-              )} */}
-
-            {/* </div>  */}
-
+         
 
 
             <div className="flex items-center justify-between flex-wrap mt-6 gap-4">
@@ -764,7 +725,7 @@ export default function CategoriesPage() {
                   onClick={() => {
                     if (page > 1) {
                       setPage(page - 1);
-                      fetchCategories(page - 1);
+                      fetchCategories();
                     }
                   }}
                   disabled={page === 1}
@@ -781,7 +742,7 @@ export default function CategoriesPage() {
                       key={idx}
                       onClick={() => {
                         setPage(Number(p));
-                        fetchCategories(Number(p));
+                        fetchCategories();
                       }}
                       className={`px-3 py-1 rounded border ${p === page ? 'bg-blue-600 text-white' : ''
                         }`}
@@ -795,7 +756,7 @@ export default function CategoriesPage() {
                   onClick={() => {
                     if (page < totalPages) {
                       setPage(page + 1);
-                      fetchCategories(page + 1);
+                      fetchCategories();
                     }
                   }}
                   disabled={page === totalPages}
@@ -820,7 +781,7 @@ export default function CategoriesPage() {
                       const page = Number(goToPageInput);
                       if (page >= 1 && page <= totalPages) {
                         setPage(page);
-                        fetchCategories(page);
+                        fetchCategories();
                         setGoToPageInput('');
                       }
                     }
@@ -832,7 +793,7 @@ export default function CategoriesPage() {
                     const page = Number(goToPageInput);
                     if (page >= 1 && page <= totalPages) {
                       setPage(page);
-                      fetchCategories(page);
+                      fetchSubcategories(page);
                       setGoToPageInput('');
                     }
                   }}
