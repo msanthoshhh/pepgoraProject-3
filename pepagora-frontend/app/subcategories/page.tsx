@@ -393,15 +393,16 @@ export default function subcategoriesPage() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-100 text-gray-700 text-sm uppercase">
+                    <th className='p-3 text-left'>S No</th>
                     <th className="p-3 text-left">Image</th>
                     <th className="p-3 text-left">categories</th>
-
                     <th className="p-3 text-left">subcategories</th>
                     <th className="p-3 text-left">Meta Title</th>
                     <th className="p-3 text-left">Meta Keywords</th>
                     <th className="p-3 text-left">Meta Description</th>
                     {userRole !== 'pepagora_manager' && (
                       <th className="p-3 text-center">Actions</th>)}
+                      {/* <th>ProdCat</th> */}
                   </tr>
                 </thead>
                 <tbody>
@@ -411,6 +412,7 @@ export default function subcategoriesPage() {
                       className={`border-t hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
                         }`}
                     >
+                        <td className="p-3 overflow-x-hidden max-w-72 text-left">{index+1}</td>
                       {/* Image */}
                       <td className="p-3">
                         {((cat.sub_cat_img_url != "null") && (cat.sub_cat_img_url != undefined)) ? (
@@ -483,7 +485,7 @@ export default function subcategoriesPage() {
 
                           </>
                           {showEditModal && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-2xl">
+                            <div className="fixed inset-0 z-50 flex items-center justify-center">
                               <div className="bg-amber-50 rounded-lg shadow-2xl p-6 w-full max-w-2xl relative border-2">
                                 <h2 className="text-xl font-bold mb-4">Edit subcategory</h2>
 
@@ -618,10 +620,10 @@ export default function subcategoriesPage() {
                                     });
                                     setShowEditModal(true);
                                   }}
-                                  className="bg-green-500 text-white px-3 py-2 rounded-2xl hover:cursor-pointer"
+                                  className="bg-green-600 text-white p-2 rounded-2xl hover:cursor-pointer"
                                 >
                                   <div className='flex'>
-                                    <TbEdit className='mt-1 mx-1' />Edit
+                                    <TbEdit className='m-1' />
                                   </div>
                                 </button>
                                 <button
@@ -630,15 +632,14 @@ export default function subcategoriesPage() {
                                     setShowDeleteModal(true);
                                     console.log("I was clicked")
                                   }}
-                                  className='bg-red-500 rounded-2xl px-3 py-2 hover:cursor-pointer text-white flex'
+                                  className='bg-red-500 rounded-2xl p-2 hover:cursor-pointer text-white flex'
 
                                 >
                                   <div className='flex'>
-                                    <RiDeleteBin6Line className='mt-1 mx-1' />Delete
+                                    <RiDeleteBin6Line className='m-1' />
                                   </div>
                                 </button>
-                              </div>
-                              <button className={`bg-yellow-400 text-white mt-2 rounded-2xl p-2 flex w-36 ml-4 hover:${prodLoading? 'cursor-progress':'cursor-pointer'}`} onClick={()=>{
+                              <button className={`bg-blue-800 text-white rounded-2xl p-2 flex hover:${prodLoading? 'cursor-progress':'cursor-pointer'}`} onClick={()=>{
                                 setSubcategoryId(cat._id)
                                 setProdLoading(true)
                                 p.length==0?fetchProducts(cat.mappedChildren?cat.mappedChildren:[]) : (()=>{
@@ -647,8 +648,9 @@ export default function subcategoriesPage() {
                                 })()
                               }} 
                               >
-                                <FaRegEye className='m-1'/> View Products
+                                <FaRegEye className='m-1'/>
                               </button>
+                              </div>
                               </div>
                             </td>
                           )}
