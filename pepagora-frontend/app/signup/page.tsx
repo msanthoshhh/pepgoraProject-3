@@ -296,8 +296,10 @@ export default function SignupPage() {
 
     try {
       setLoading(true);
+      console.log(formData)
       const res = await axiosInstance.post('/auth/signup', formData);
-      saveToken(res.data.access_token, res.data.user.id, res.data.user.role);
+      // saveToken(res.data.access_token, res.data.user.id, res.data.user.role);
+      console.log(res)
       if (res.status === 200) {
         toast.success('Signup successful!');
       }

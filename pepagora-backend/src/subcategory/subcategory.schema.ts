@@ -31,7 +31,7 @@ export class Subcategory extends Document {
   metaDescription: string;
 
  @Prop()
-  imageUrl?: string;
+  sub_cat_img_url?: string;
   
 }
 

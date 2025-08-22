@@ -27,7 +27,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed top-0 left-0 h-full w-64 bg-gray-800 text-white shadow-lg">
+    <aside className="fixed top-0 left-0 h-full w-64 bg-gray-800 text-white shadow-lg z-10">
       <div className="p-4 text-2xl font-bold border-b border-gray-700">
         <Link href="/dashboard" className="flex items-center space-x-2">
           <img src="/pepagora_logo.jpeg" alt="Pepagora Logo" className="w-8 h-8" />

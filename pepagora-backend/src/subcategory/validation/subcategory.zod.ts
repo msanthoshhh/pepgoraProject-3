@@ -22,7 +22,7 @@ export const createSubcategorySchema = z.object({
   metaKeyword: z.string().optional(),
   metaDescription: z.string().optional(),
 
-  imageUrl: z
+  sub_cat_img_url: z
     .string()
     .url({ message: 'Image URL must be a valid URL' })
     .optional(),

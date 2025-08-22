@@ -29,7 +29,7 @@ export class CreateSubcategoryDto {
 
   @IsOptional()
   @IsUrl({}, { message: 'Image URL must be a valid URL' })
-  imageUrl?: string; // New field for S3 image URL
+  sub_cat_img_url?: string; // New field for S3 image URL
 
     @IsOptional()
     @IsArray()

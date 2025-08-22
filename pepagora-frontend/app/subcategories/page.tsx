@@ -60,6 +60,7 @@ export default function subcategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [productView, setProductView] = useState<boolean>();
   const [subCategoryId, setSubcategoryId] = useState<string | null>('');
+  const [prodLoading, setProdLoading] = useState<boolean>(false);
   
 
   // const router = useRouter();
@@ -109,7 +110,6 @@ export default function subcategoriesPage() {
   }, []);
 
   const fetchProducts =async (id:string[])=>{
-    // setLoading(true); 
     p=[]
     try{ 
       for(let i=0;i<id.length;i++){
@@ -117,10 +117,16 @@ export default function subcategoriesPage() {
         p.push(res?res.data.data.name:'');
       }
       console.log(p);
-      p.length>0?setProductView(true):setProductView(false);
+      if(p.length>0){
+        setProductView(true);
+        setProdLoading(false);
+      }else{
+        setProductView(false);
+      }
     } 
     catch(e){
-      toast.error("Products unavailable")
+      toast.error("Products unavailable");
+      setProdLoading(false);
     }
   }
 
@@ -142,7 +148,7 @@ export default function subcategoriesPage() {
     setLoading(true);
     try {
       const res = await axiosInstance.get('/categories');
-      console.log('Fetched subcatefghgfgories:', res.data.data.data);
+      console.log('Fetched catefghgfgories:', res.data.data.data);
       const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
       setCategories(data);
     } catch (err) {
@@ -160,7 +166,7 @@ export default function subcategoriesPage() {
         params: { page: currentPage, limit },
       });
 
-      console.log('Fetched categories:', res.data.data.data);
+      console.log('Fetched subcategories:', res.data.data.data);
       const data = Array.isArray(res.data.data.data) ? res.data.data.data : [];
       setSubCategories(data);
       setTotalPages(res.data.data.pagination.totalPages || 1);
@@ -249,7 +255,7 @@ export default function subcategoriesPage() {
     try {
       // const token = localStorage.getItem('accessToken');
 
-      const payload = { sub_cat_name: name, mappedParent: category, metaTitle, metaDescription, metaKeyword };
+      const payload = { sub_cat_name: name, mappedParent: category, metaTitle, metaDescription, metaKeyword, sub_cat_img_url:imageUrl };
 
       console.log(payload);
 
@@ -477,7 +483,7 @@ export default function subcategoriesPage() {
 
                           </>
                           {showEditModal && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center">
+                            <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-2xl">
                               <div className="bg-amber-50 rounded-lg shadow-2xl p-6 w-full max-w-2xl relative border-2">
                                 <h2 className="text-xl font-bold mb-4">Edit subcategory</h2>
 
@@ -581,7 +587,7 @@ export default function subcategoriesPage() {
                             <div className={`${viewReadMore ? 'max-h-max' : 'overflow-y-hidden max-h-14'}`}>
                               {cat.metaDescription || '-'}
                             </div>
-                            {stringLength(cat.metaDescription || '') && (
+                            {(stringLength(cat.metaDescription || '')) && (
                               <p
                                 className="text-blue-500 cursor-pointer text-xs mt-1"
                                 onClick={() => setViewReadMore((prev) => !prev)}
@@ -632,8 +638,9 @@ export default function subcategoriesPage() {
                                   </div>
                                 </button>
                               </div>
-                              <button className='bg-yellow-400 text-white mt-2 rounded-2xl p-2 flex w-36 ml-4 hover:cursor-pointer' onClick={()=>{
+                              <button className={`bg-yellow-400 text-white mt-2 rounded-2xl p-2 flex w-36 ml-4 hover:${prodLoading? 'cursor-progress':'cursor-pointer'}`} onClick={()=>{
                                 setSubcategoryId(cat._id)
+                                setProdLoading(true)
                                 p.length==0?fetchProducts(cat.mappedChildren?cat.mappedChildren:[]) : (()=>{
                                   p=[];
                                   setProductView(false);

@@ -5,6 +5,15 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import axiosInstance from '@/lib/axiosInstance';
 import { saveToken } from '@/lib/auth';
+import Dashboard from '../dashboard/page';
+
+
+// type user ={
+//   email:string,
+//   _id:string,
+//   username:string,
+//   role:string
+// }
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -12,6 +21,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+
 
   const router = useRouter();
 
@@ -27,9 +38,12 @@ export default function LoginPage() {
       });
 
       const { accessToken, user } = res.data.data;
+      console.log(user)
       saveToken(accessToken, user.id, user.role);
       localStorage.setItem('accessToken', accessToken);
-      router.push('/dashboard');
+      const name = user?.username;
+      localStorage.setItem('userName',name);
+      router.push('/dashboard')
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.response?.data?.message || 'Login failed. Please try again.');

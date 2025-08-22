@@ -63,7 +63,7 @@ export class AuthService {
       message: 'Login successful',
       accessToken,
       refreshToken, // Send plain token to client
-      user: { id: user._id, email: user.email, role: user.role },
+      user: { id: user._id, email: user.email, role: user.role, username:user.username },
     };
   }
 
